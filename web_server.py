@@ -11,7 +11,7 @@ from config import TOKEN
 
 # Log konfiguratsiyasi
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # DEBUG level qo'shish
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
@@ -119,8 +119,8 @@ def create_application():
             app.logger.error(f"❌ Application yaratishda xatolik: {e}")
             import traceback
             app.logger.error(traceback.format_exc())
-            # Re-raise qilmaslik - application hali ham ishlashiga ruxsat berish
-            telegram_app = None
+            # Exception ni re-raise qilish debugging uchun
+            raise e
         
     return telegram_app
 
@@ -147,7 +147,14 @@ def webhook():
             app.logger.warning(f"⚠️ Juda ko'p active update'lar ({active_updates}), keyinroq qayta urining")
             return jsonify({"status": "busy", "message": "Too many concurrent updates"}), 429
         
-        app_instance = create_application()
+        try:
+            app_instance = create_application()
+            app.logger.info(f"📋 Application yaratildi: {app_instance}")
+        except Exception as app_error:
+            app.logger.error(f"❌ Application yaratishda xatolik: {app_error}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({"status": "error", "message": f"Application error: {str(app_error)}"}), 500
         
         if app_instance is None:
             app.logger.error("❌ Telegram application mavjud emas")
