@@ -1,8 +1,8 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import os
 import logging
-import threading
-import time
+import asyncio
+from telegram import Update
 from config import TOKEN
 
 # Log konfiguratsiyasi
@@ -14,52 +14,71 @@ logging.basicConfig(
 # Flask app yaratish
 app = Flask(__name__)
 
-# Bot ishga tushirish uchun funksiya
-def run_bot():
-    try:
-        # Simple retry mechanism
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                from bot import main
-                main()
-                break  # If successful, break out of retry loop
-            except Exception as e:
-                app.logger.error(f"Bot start attempt {attempt + 1} failed: {str(e)}")
-                if attempt < max_retries - 1:
-                    time.sleep(5)  # Wait 5 seconds before retry
-                else:
-                    app.logger.error("All retry attempts failed")
-                    raise
-    except Exception as e:
-        app.logger.error(f"Bot ishga tushishda xatolik: {str(e)}")
-        import traceback
-        app.logger.error(traceback.format_exc())
+# Global application object
+telegram_app = None
 
-# Bot threadini boshlash
-def start_bot_thread():
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-    return bot_thread
-
-# Bot threadini ishga tushirish
-bot_thread = start_bot_thread()
+def create_application():
+    """Create and configure the Telegram application"""
+    global telegram_app
+    if telegram_app is None:
+        # Import handlers and setup
+        from bot import setup_handlers
+        from telegram.ext import Application
+        
+        # Application yaratish
+        builder = Application.builder()
+        builder.token(TOKEN)
+        
+        # Connection pool sozlamalari
+        builder.pool_timeout(30)
+        builder.read_timeout(30)
+        builder.write_timeout(30)
+        builder.connect_timeout(30)
+        
+        telegram_app = builder.build()
+        
+        # Setup handlers
+        setup_handlers(telegram_app)
+        
+        # Initialize the application
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(telegram_app.initialize())
+        
+    return telegram_app
 
 # Asosiy sahifa
 @app.route('/')
 def index():
-    return "Kino Bot ishlayapti!"
+    return "Kino Bot ishlayapti! Webhook mode."
 
 # Health check endpoint
 @app.route('/health')
 def health():
     return "OK", 200
 
-# Webhook endpoint (kerak bo'lganda)
+# Webhook endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    return "Webhook received", 200
+    try:
+        app_instance = create_application()
+        
+        # Get the update from request
+        update_dict = request.get_json()
+        if not update_dict:
+            return jsonify({"status": "error", "message": "No JSON data"}), 400
+            
+        update = Update.de_json(update_dict, app_instance.bot)
+        
+        # Process the update
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(app_instance.process_update(update))
+        
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        app.logger.error(f"Webhook error: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     # Production port yoki default 8080
