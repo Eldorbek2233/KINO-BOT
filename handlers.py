@@ -785,7 +785,7 @@ def add_handlers(app):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("admin_menu", admin_menu))
-    app.add_handler(CommandHandler("cancel", cancel_command))
+    app.add_handler(CommandHandler("cancel", cancel_handler))
     
     # Reklama conversation handler
     reklama_conv_handler = ConversationHandler(
@@ -793,7 +793,7 @@ def add_handlers(app):
         states={
             REKLAMA_WAIT: [MessageHandler(filters.TEXT | filters.PHOTO, handle_ad_content)],
         },
-        fallbacks=[CommandHandler("cancel", cancel_command)],
+        fallbacks=[CommandHandler("cancel", cancel_handler)],
         allow_reentry=True,
         per_message=False
     )
