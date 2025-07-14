@@ -21,6 +21,8 @@ app = Flask(__name__)
 telegram_app = None
 webhook_set = False
 app_initialized = False  # Application initialize bo'lganligini kuzatish
+active_updates = 0      # Hozirda qaytarilayotgan update'lar soni
+max_concurrent_updates = 5  # Maksimal bir vaqtda qayta ishlanadigan update'lar
 
 def set_webhook_if_needed():
     """Deploy qilingandan keyin webhook ni avtomatik o'rnatish"""
@@ -142,7 +144,14 @@ def health():
 # Webhook endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    global active_updates
+    
     try:
+        # Rate limiting - juda ko'p concurrent update'larni oldini olish
+        if active_updates >= max_concurrent_updates:
+            app.logger.warning(f"⚠️ Juda ko'p active update'lar ({active_updates}), keyinroq qayta urining")
+            return jsonify({"status": "busy", "message": "Too many concurrent updates"}), 429
+        
         app_instance = create_application()
         
         if app_instance is None:
@@ -169,8 +178,11 @@ def webhook():
         
         def process_update_sync():
             """Sync context da async update ni process qilish"""
+            global active_updates
+            
             try:
-                app.logger.info("🔄 Update ni process qilish boshlandi...")
+                active_updates += 1  # Active update counter ko'tarish
+                app.logger.info(f"🔄 Update ni process qilish boshlandi... (Active: {active_updates})")
                 
                 # Thread-safe asyncio approach
                 import asyncio
@@ -179,12 +191,19 @@ def webhook():
                 async def async_process():
                     """Async context da update ni process qilish"""
                     try:
-                        # Update ni to'g'ridan-to'g'ri process qilish
-                        # Initialize har safar emas, faqat birinchi marta qilinadi
-                        await app_instance.process_update(update)
+                        # Update ni timeout bilan process qilish
+                        import asyncio
+                        
+                        # Update processing timeout (30 soniya)
+                        await asyncio.wait_for(
+                            app_instance.process_update(update), 
+                            timeout=30.0
+                        )
                         
                         app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi")
                         
+                    except asyncio.TimeoutError:
+                        app.logger.error(f"⏰ Update {update.update_id} timeout - 30 soniyadan ko'p vaqt oldi")
                     except Exception as e:
                         app.logger.error(f"❌ Async update process xatolik: {e}")
                         import traceback
@@ -206,6 +225,9 @@ def webhook():
                 app.logger.error(f"❌ Update process qilishda xatolik: {e}")
                 import traceback
                 app.logger.error(traceback.format_exc())
+            finally:
+                active_updates -= 1  # Active update counter pasaytirish
+                app.logger.info(f"🏁 Update qayta ishlash tugadi (Active: {active_updates})")
         
         # Background thread da ishga tushirish
         thread = threading.Thread(target=process_update_sync)
