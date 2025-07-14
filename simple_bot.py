@@ -16,6 +16,12 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Debug: Check TOKEN value
+logger.info(f"🔍 TOKEN debug - Length: {len(TOKEN) if TOKEN else 0}")
+logger.info(f"🔍 TOKEN debug - First 10 chars: {TOKEN[:10] if TOKEN else 'None'}")
+logger.info(f"🔍 BOT_TOKEN env var: {os.getenv('BOT_TOKEN', 'NOT SET')[:10] if os.getenv('BOT_TOKEN') else 'NOT SET'}")
+logger.info(f"🔍 Environment variables available: {list(os.environ.keys())}")
+
 def create_minimal_app():
     """Minimal Telegram application yaratish"""
     try:
