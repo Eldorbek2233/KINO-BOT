@@ -17,6 +17,24 @@ logger = logging.getLogger(__name__)
 # Flask app yaratish
 app = Flask(__name__)
 
+# Global error handler
+@app.errorhandler(500)
+def internal_error(error):
+    app.logger.error(f"500 Internal Server Error: {error}")
+    return jsonify({"status": "error", "message": "Internal server error"}), 200
+
+@app.errorhandler(404)
+def not_found(error):
+    app.logger.warning(f"404 Not Found: {error}")
+    return jsonify({"status": "error", "message": "Not found"}), 404
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error(f"Unhandled exception: {e}")
+    import traceback
+    app.logger.error(traceback.format_exc())
+    return jsonify({"status": "error", "message": "Server error"}), 200
+
 # Global application object
 telegram_app = None
 webhook_set = False
@@ -148,6 +166,8 @@ def webhook():
     global active_updates
     
     try:
+        app.logger.info("🌐 Webhook so'rovi keldi")
+        
         # Rate limiting - juda ko'p concurrent update'larni oldini olish
         if active_updates >= max_concurrent_updates:
             app.logger.warning(f"⚠️ Juda ko'p active update'lar ({active_updates}), keyinroq qayta urining")
@@ -160,10 +180,14 @@ def webhook():
             return jsonify({"status": "error", "message": "Application not available"}), 500
         
         # Get the update from request
-        update_dict = request.get_json()
-        if not update_dict:
-            app.logger.warning("Webhook: Bo'sh JSON ma'lumot keldi")
-            return jsonify({"status": "error", "message": "No JSON data"}), 400
+        try:
+            update_dict = request.get_json()
+            if not update_dict:
+                app.logger.warning("Webhook: Bo'sh JSON ma'lumot keldi")
+                return jsonify({"status": "error", "message": "No JSON data"}), 400
+        except Exception as e:
+            app.logger.error(f"JSON parse xatolik: {e}")
+            return jsonify({"status": "error", "message": "Invalid JSON"}), 400
             
         # Update yaratish
         try:
@@ -171,6 +195,7 @@ def webhook():
             app.logger.info(f"📥 Yangi update keldi: {update.update_id}")
         except Exception as e:
             app.logger.error(f"Update parse qilishda xatolik: {e}")
+            app.logger.error(f"Update data: {update_dict}")
             return jsonify({"status": "error", "message": "Invalid update format"}), 400
         
         # Async task yaratish - blokingni oldini olish
@@ -251,14 +276,18 @@ def webhook():
         thread.daemon = True
         thread.start()
         
-        # Tezkor javob - Telegram kutmaydi
-        return jsonify({"status": "ok"})
+        # Tezkor javob - Telegram kutmaydi (SUCCESS javobi)
+        app.logger.info("✅ Webhook javobi yuborildi")
+        return jsonify({"status": "ok"}), 200
         
     except Exception as e:
-        app.logger.error(f"Webhook xatoligi: {str(e)}")
+        app.logger.error(f"Webhook umumiy xatoligi: {str(e)}")
         import traceback
         app.logger.error(traceback.format_exc())
-        return jsonify({"status": "error", "message": str(e)}), 500
+        
+        # Telegram uchun 200 javob qaytarish (xatolik bo'lsa ham)
+        # Bu Telegram webhook'ni qayta ishlatishini oldini oladi
+        return jsonify({"status": "error", "message": "Internal processing error"}), 200
 
 if __name__ == '__main__':
     try:
