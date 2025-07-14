@@ -8,7 +8,10 @@ import os
 import time
 import asyncio
 import re
+import logging
 from config import ADMIN_ID, REQUIRED_CHANNELS
+
+logger = logging.getLogger(__name__)
 
 REKLAMA_WAIT = 1
 # Kino joylash uchun statuslar
@@ -322,52 +325,38 @@ async def users_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Admin kanalga video tashlaganda – file_id ni avtomatik saqlaydi
 async def check_membership(user_id, context):
-    """Optimized membership check with timeout"""
-    import asyncio
-    
-    async def check_single_channel(channel):
-        """Single channel membership check with timeout"""
-        try:
-            # Agar username formatida bo'lsa, link emas, faqat username yoki ID
-            chat_id = channel
-            if channel.startswith("https://t.me/"):
-                chat_id = "@" + channel.split("https://t.me/")[-1]
-            
-            # Timeout bilan membership check (5 soniya)
-            member = await asyncio.wait_for(
-                context.bot.get_chat_member(chat_id, user_id),
-                timeout=5.0
-            )
-            
-            return member.status in ["member", "administrator", "creator"]
-            
-        except asyncio.TimeoutError:
-            # Timeout bo'lsa, membership yo'q deb hisoblaymiz
-            return False
-        except Exception:
-            # Boshqa xatolik bo'lsa ham membership yo'q
-            return False
-    
-    # Barcha kanallarni parallel tekshirish
+    """Simplified membership check without timeout issues"""
     try:
-        # Maksimal 10 soniya timeout barcha kanallar uchun
-        tasks = [check_single_channel(channel) for channel in REQUIRED_CHANNELS]
-        results = await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),
-            timeout=10.0
-        )
+        # Majburiy kanallar bo'sh bo'lsa, barcha foydalanuvchilarni ruxsat berish
+        if not REQUIRED_CHANNELS:
+            return True
         
-        # Agar biror kanal membership yo'q bo'lsa, False qaytarish
-        for result in results:
-            if isinstance(result, Exception) or not result:
+        # Har bir kanal uchun a'zolikni tekshirish
+        for channel in REQUIRED_CHANNELS:
+            try:
+                # Timeout bilan membership check (3 soniya)
+                member = await asyncio.wait_for(
+                    context.bot.get_chat_member(channel, user_id),
+                    timeout=3.0
+                )
+                
+                # A'zo emas bo'lsa, False qaytarish
+                if member.status not in ["member", "administrator", "creator"]:
+                    return False
+                    
+            except asyncio.TimeoutError:
+                # Timeout bo'lsa, membership yo'q deb hisoblaymiz
+                logger.warning(f"⏰ Membership check timeout for channel {channel}")
+                return False
+            except Exception as e:
+                # Boshqa xatolik bo'lsa ham membership yo'q
+                logger.warning(f"❌ Membership check error for {channel}: {e}")
                 return False
         
         return True
         
-    except asyncio.TimeoutError:
-        # Umumiy timeout bo'lsa, membership yo'q deb hisoblaymiz
-        return False
     except Exception:
+        # Umumiy xatolik bo'lsa, membership yo'q
         return False
 
 async def send_subscription_message(update: Update, context: ContextTypes.DEFAULT_TYPE = None):
