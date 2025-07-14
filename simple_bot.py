@@ -44,6 +44,23 @@ def create_minimal_app():
         from handlers import add_handlers
         add_handlers(app)
         
+        # Application ni initialize qilish
+        import asyncio
+        
+        async def init_application():
+            await app.initialize()
+            logger.info("✅ Application initialized")
+        
+        # Event loop yaratish va initialization
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(init_application())
+            loop.close()
+        except Exception as init_error:
+            logger.error(f"❌ Initialize error: {init_error}")
+            raise
+        
         logger.info("✅ Minimal application tayyor")
         return app
         
