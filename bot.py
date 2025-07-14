@@ -1,4 +1,4 @@
-from telegram import BotCommand, KeyboardButton
+from telegram import BotCommand, KeyboardButton, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ConversationHandler
 from config import TOKEN, ADMIN_ID
 from handlers import *
@@ -83,8 +83,9 @@ def main():
     app.add_handler(CallbackQueryHandler(stat_button_handler, pattern="^show_stat$"))
 
     print("🤖 Kino bot ishga tushdi...")  # Uzbek tilida
-    # Polling rejimida ishlash
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    # Oddiy polling rejimida ishlash
+    app.run_polling()
 
 if __name__ == "__main__":
     main()

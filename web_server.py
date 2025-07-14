@@ -2,19 +2,29 @@ from flask import Flask, request
 import threading
 import os
 import logging
-from bot import main
+import time
+from config import TOKEN
 
 # Flask app yaratish
 app = Flask(__name__)
 
-# Bot ishga tushirish uchun thread funksiyasi
+# Bot ishga tushirish uchun funksiya - subprocessda ishga tushiramiz
 def run_bot():
-    main()
+    from bot import main
+    try:
+        main()
+    except Exception as e:
+        app.logger.error(f"Bot ishga tushishda xatolik: {str(e)}")
 
 # Bot threadini boshlash
-bot_thread = threading.Thread(target=run_bot)
-bot_thread.daemon = True
-bot_thread.start()
+def start_bot_thread():
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    return bot_thread
+
+# Bot threadini ishga tushirish
+bot_thread = start_bot_thread()
 
 # Asosiy sahifa
 @app.route('/')
