@@ -23,15 +23,15 @@ def create_minimal_app():
         
         # Aggressive connection pool optimization for Render's resource constraints
         app = Application.builder().token(TOKEN)\
-            .pool_timeout(120)\
-            .connection_pool_size(4)\
-            .read_timeout(20)\
-            .write_timeout(20)\
-            .connect_timeout(15)\
-            .get_updates_pool_timeout(120)\
-            .get_updates_read_timeout(20)\
-            .get_updates_write_timeout(20)\
-            .get_updates_connect_timeout(15)\
+            .pool_timeout(180)\
+            .connection_pool_size(6)\
+            .read_timeout(15)\
+            .write_timeout(15)\
+            .connect_timeout(10)\
+            .get_updates_pool_timeout(180)\
+            .get_updates_read_timeout(15)\
+            .get_updates_write_timeout(15)\
+            .get_updates_connect_timeout(10)\
             .build()
         
         # Faqat mavjud bo'lgan handlerlarni qo'shish
