@@ -3,6 +3,9 @@ import os
 import logging
 import asyncio
 import threading
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from telegram import Update
 from config import TOKEN
 
@@ -77,14 +80,15 @@ def create_application():
         try:
             app.logger.info("🔧 Telegram application yaratilmoqda...")
             
-            # Import from bot module
-            from bot import main
+            # Direct Telegram application creation
+            from telegram.ext import Application
+            from handlers import add_handlers
             
-            # Application yaratish - bot.py dan olish
-            telegram_app = main()
+            # Application yaratish
+            telegram_app = Application.builder().token(TOKEN).build()
             
-            if telegram_app is None:
-                raise Exception("Bot.main() None qaytardi")
+            # Handlers qo'shish
+            add_handlers(telegram_app)
             
             # PTB 20.0 uchun application ni faqat bir marta initialize qilish
             if not app_initialized:

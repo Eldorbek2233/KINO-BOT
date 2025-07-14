@@ -772,3 +772,65 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             logger.error(f"Error handler o'zida xatolik: {e}")
+
+def add_handlers(app):
+    """Barcha handlerlarni application ga qo'shish"""
+    from telegram.ext import CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
+    
+    # Reklama conversation handler
+    reklama_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("reklama", send_advertisement)],
+        states={
+            REKLAMA_WAIT: [MessageHandler(filters.TEXT | filters.PHOTO, handle_ad_content)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_handler)],
+        allow_reentry=True,
+        per_message=False
+    )
+
+    # Kino joylash conversation handler
+    place_movie_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(lambda update, context: place_movie_start(update, context), pattern="^place_movie$")],
+        states={
+            WAITING_FOR_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_movie_code)],
+            WAITING_FOR_VIDEO: [MessageHandler(filters.VIDEO | filters.DOCUMENT, get_movie_file)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_handler)],
+        allow_reentry=True,
+        per_message=False
+    )
+
+    # Kanal qo'shish conversation handler
+    channel_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(lambda update, context: channel_menu_start(update, context), pattern="^channel_menu$")],
+        states={
+            CHANNEL_MENU: [CallbackQueryHandler(channel_menu_handler, pattern="^(add_channel|remove_channel|list_channels|back_to_admin)$")],
+            WAITING_FOR_CHANNEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_channel_input)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_handler)],
+        allow_reentry=True,
+        per_message=False
+    )
+
+    # Handlerlarni qo'shish
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("stat", stat))
+    app.add_handler(CommandHandler("admin_menu", admin_menu))
+    app.add_handler(CommandHandler("cancel", cancel_handler))
+    
+    # Conversation handlerlar
+    app.add_handler(reklama_conv_handler)
+    app.add_handler(place_movie_conv_handler)
+    app.add_handler(channel_conv_handler)
+    
+    # Admin menu callback handlerlar
+    app.add_handler(CallbackQueryHandler(lambda update, context: handle_admin_callback(update, context), pattern="^(download|upload|bulk_upload|upload_txt)$"))
+    
+    # Matn xabarlar uchun handler
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Error handler
+    app.add_error_handler(error_handler)
+    
+    return app
