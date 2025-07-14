@@ -65,6 +65,11 @@ def create_application():
                 raise Exception("Bot.main() None qaytardi")
             
             app.logger.info("✅ Telegram application muvaffaqiyatli yaratildi")
+            app.logger.info(f"📋 Application type: {type(telegram_app)}")
+            
+            # Application attributes ni debug qilish
+            if hasattr(telegram_app, 'bot'):
+                app.logger.info(f"🤖 Bot mavjud: {telegram_app.bot.username if hasattr(telegram_app.bot, 'username') else 'Unknown'}")
             
         except Exception as e:
             app.logger.error(f"❌ Application yaratishda xatolik: {e}")
@@ -122,9 +127,9 @@ def webhook():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 
-                # Application ni initialize qilish (agar kerak bo'lsa)
-                if not app_instance.initialized:
-                    loop.run_until_complete(app_instance.initialize())
+                # Application initialization ni skip qilish - faqat update ni process qilish
+                # PTB 20.0 da initialized atributi boshqacha ishlashi mumkin
+                app.logger.info("🔄 Update ni process qilish boshlandi...")
                 
                 # Update ni process qilish
                 loop.run_until_complete(app_instance.process_update(update))
