@@ -784,7 +784,6 @@ def add_handlers(app):
     # Asosiy handlerlar
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("stat", stat))
     app.add_handler(CommandHandler("admin_menu", admin_menu))
     app.add_handler(CommandHandler("cancel", cancel_command))
     
