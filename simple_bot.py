@@ -21,20 +21,17 @@ def create_minimal_app():
     try:
         logger.info("🔧 Minimal Telegram application yaratilmoqda...")
         
-        # Application yaratish
-        app = Application.builder().token(TOKEN).build()
-        
-        # Connection pool optimizations for Render
+        # Connection pool optimizations for Render - minimal but efficient
         app = Application.builder().token(TOKEN)\
-            .pool_timeout(300)\
-            .connection_pool_size(32)\
-            .read_timeout(120)\
-            .write_timeout(120)\
-            .connect_timeout(120)\
-            .get_updates_pool_timeout(300)\
-            .get_updates_read_timeout(120)\
-            .get_updates_write_timeout(120)\
-            .get_updates_connect_timeout(120)\
+            .pool_timeout(60)\
+            .connection_pool_size(8)\
+            .read_timeout(30)\
+            .write_timeout(30)\
+            .connect_timeout(30)\
+            .get_updates_pool_timeout(60)\
+            .get_updates_read_timeout(30)\
+            .get_updates_write_timeout(30)\
+            .get_updates_connect_timeout(30)\
             .build()
         
         # Faqat mavjud bo'lgan handlerlarni qo'shish
