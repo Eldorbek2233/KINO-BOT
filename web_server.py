@@ -21,11 +21,12 @@ app = Flask(__name__)
 # Bot ishga tushirish uchun funksiya
 def run_bot():
     try:
-        import asyncio
         from bot import main
-        asyncio.run(main())
+        main()  # Since main() is now a regular function, not async
     except Exception as e:
         app.logger.error(f"Bot ishga tushishda xatolik: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
 
 # Bot threadini boshlash
 def start_bot_thread():
