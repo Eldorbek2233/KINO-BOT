@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 # Flask app yaratish
 app = Flask(__name__)
 
+# Railway environment detection
+RAILWAY_ENV = os.getenv('RAILWAY_ENVIRONMENT')
+if RAILWAY_ENV:
+    logger.info(f"🚂 Railway environment detected: {RAILWAY_ENV}")
+
 # Global error handler
 @app.errorhandler(500)
 def internal_error(error):

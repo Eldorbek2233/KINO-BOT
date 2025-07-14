@@ -57,9 +57,9 @@ def main():
     """Main function"""
     logger.info("🚀 Kino Bot minimal version starting...")
     
-    # Check if running on Render
-    if os.getenv('PORT'):
-        logger.info("🌐 Render environment detected, starting webhook server...")
+    # Check if running on Railway or any cloud platform
+    if os.getenv('PORT') or os.getenv('RAILWAY_ENVIRONMENT'):
+        logger.info("🌐 Cloud environment detected, starting webhook server...")
         
         # Import and start web server
         import web_server
@@ -73,9 +73,13 @@ def main():
         # Set global telegram app in web_server
         web_server.set_telegram_app(telegram_app)
         
-        # Set webhook
-        render_url = "https://kino-bot-o8dw.onrender.com"
-        webhook_url = f"{render_url}/webhook"
+        # Get Railway URL or use PORT for webhook
+        railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+        if railway_url:
+            webhook_url = f"https://{railway_url}/webhook"
+        else:
+            # Fallback for other platforms
+            webhook_url = f"https://kino-bot-production.up.railway.app/webhook"
         
         try:
             import requests
