@@ -49,14 +49,34 @@ def create_application():
     """Create and configure the Telegram application"""
     global telegram_app
     if telegram_app is None:
-        # Import from bot module
-        from bot import main, setup_handlers
-        from telegram.ext import Application
-        
-        # Application yaratish - bot.py dan olish
-        telegram_app = main()
-        
-        print("✅ Telegram application yaratildi va webhook uchun tayyor")
+        try:
+            # Import from bot module
+            from bot import main
+            
+            # Application yaratish - bot.py dan olish
+            telegram_app = main()
+            
+            # Application ni initialize qilish
+            import asyncio
+            
+            # Event loop yaratish yoki mavjudini olish
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Application ni initialize qilish
+            if not telegram_app.initialized:
+                loop.run_until_complete(telegram_app.initialize())
+            
+            app.logger.info("✅ Telegram application yaratildi va webhook uchun tayyor")
+            
+        except Exception as e:
+            app.logger.error(f"❌ Application yaratishda xatolik: {e}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            raise
         
     return telegram_app
 
@@ -81,18 +101,30 @@ def webhook():
         # Get the update from request
         update_dict = request.get_json()
         if not update_dict:
+            app.logger.warning("Webhook: Bo'sh JSON ma'lumot keldi")
             return jsonify({"status": "error", "message": "No JSON data"}), 400
             
         update = Update.de_json(update_dict, app_instance.bot)
         
         # Process the update
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        import asyncio
+        
+        # Event loop yaratish yoki mavjudini olish
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Update ni process qilish
         loop.run_until_complete(app_instance.process_update(update))
         
         return jsonify({"status": "ok"})
+        
     except Exception as e:
-        app.logger.error(f"Webhook error: {str(e)}")
+        app.logger.error(f"Webhook xatoligi: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
