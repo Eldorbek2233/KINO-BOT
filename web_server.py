@@ -7,11 +7,7 @@ import time
 import threading
 from config import TOKEN
 
-# First import the patch to avoid imghdr issues
-try:
-    import telegram_patch
-except Exception as e:
-    logging.error(f"Error importing telegram_patch: {str(e)}")
+# No need for telegram_patch with v20.8
 
 # Log konfiguratsiyasi
 logging.basicConfig(
@@ -25,8 +21,9 @@ app = Flask(__name__)
 # Bot ishga tushirish uchun funksiya
 def run_bot():
     try:
+        import asyncio
         from bot import main
-        main()
+        asyncio.run(main())
     except Exception as e:
         app.logger.error(f"Bot ishga tushishda xatolik: {str(e)}")
 

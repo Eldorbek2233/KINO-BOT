@@ -1,14 +1,13 @@
-# First import patch to avoid imghdr issues
-try:
-    import telegram_patch
-except Exception as e:
-    print(f"Error importing telegram_patch: {str(e)}")
+# No need for telegram_patch with v20.8
+# The newer versions of python-telegram-bot don't use imghdr
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
-from telegram.ext import ConversationHandler, CallbackContext
+from telegram.ext import ConversationHandler, ContextTypes
 import json
 import os
 import time
+import asyncio
+import re
 from config import ADMIN_ID, REQUIRED_CHANNELS
 
 REKLAMA_WAIT = 1
@@ -20,19 +19,19 @@ CHANNEL_MENU = 4
 WAITING_FOR_CHANNEL = 5
 
 # Boshlang'ich handler: /reklama bosilganda
-def send_advertisement(update, context):
+async def send_advertisement(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        update.message.reply_text("Siz admin emassiz.")
+        await update.message.reply_text("Siz admin emassiz.")
         return ConversationHandler.END
-    update.message.reply_text("Reklama matnini yoki rasmini yuboring.")
+    await update.message.reply_text("Reklama matnini yoki rasmini yuboring.")
     return REKLAMA_WAIT
 
 # Reklama matni yoki rasmini qabul qilish handleri
-def handle_ad_content(update, context):
+async def handle_ad_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        update.message.reply_text("Siz admin emassiz.")
+        await update.message.reply_text("Siz admin emassiz.")
         if 'waiting_for_reklama' in context.user_data:
             context.user_data.pop('waiting_for_reklama')
         return ConversationHandler.END
@@ -46,7 +45,7 @@ def handle_ad_content(update, context):
     elif update.message and update.message.text:
         text = update.message.text
     else:
-        update.message.reply_text("Xatolik: Reklama matni yoki rasmi topilmadi.")
+        await update.message.reply_text("Xatolik: Reklama matni yoki rasmi topilmadi.")
         if 'waiting_for_reklama' in context.user_data:
             context.user_data.pop('waiting_for_reklama')
         return ConversationHandler.END
@@ -55,29 +54,29 @@ def handle_ad_content(update, context):
     print(f"DEBUG: Reklama foydalanuvchilar: {users}")  # Debug print
     
     if not users:
-        update.message.reply_text("Xatolik: Foydalanuvchilar ro'yxati bo'sh!")
+        await update.message.reply_text("Xatolik: Foydalanuvchilar ro'yxati bo'sh!")
         if 'waiting_for_reklama' in context.user_data:
             context.user_data.pop('waiting_for_reklama')
         return ConversationHandler.END
     
-    update.message.reply_text("⏳ Reklama yuborilmoqda... Kutib turing.")
+    await update.message.reply_text("⏳ Reklama yuborilmoqda... Kutib turing.")
     
     count = 0
     for uid in users:
         try:
             if photo:
-                context.bot.send_photo(chat_id=uid, photo=photo, caption=text)
+                await context.bot.send_photo(chat_id=uid, photo=photo, caption=text)
             else:
-                context.bot.send_message(chat_id=uid, text=text)
+                await context.bot.send_message(chat_id=uid, text=text)
             count += 1
             # Har 30 xabardan keyin kuting (Telegram cheklovlari uchun)
             if count % 30 == 0:
-                time.sleep(1)
+                await asyncio.sleep(1)
         except Exception as e:
             print(f"DEBUG: Reklama xatolik {uid}: {e}")  # Debug print
             continue
             
-    update.message.reply_text(f"✅ Reklama {count} foydalanuvchiga yuborildi.")
+    await update.message.reply_text(f"✅ Reklama {count} foydalanuvchiga yuborildi.")
     if 'waiting_for_reklama' in context.user_data:
         context.user_data.pop('waiting_for_reklama')
     return ConversationHandler.END
@@ -114,10 +113,10 @@ def format_uptime(seconds):
     month, day = divmod(day, 30)
     return f"{year} yil, {month} oy, {day} kun, {hour} soat, {mins} daqiqa, {sec} sekund"
 
-def bot_stat(update, context):
+async def bot_stat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        update.message.reply_text("⛔️ Bu funksiyadan faqat adminlar foydalana oladi.")
+        await update.message.reply_text("⛔️ Bu funksiyadan faqat adminlar foydalana oladi.")
         return
         
     users = load_users()
@@ -125,7 +124,7 @@ def bot_stat(update, context):
     video_count = len(file_ids)
     uptime = format_uptime(time.time() - BOT_START_TIME)
     active_users_count = get_active_users_count()
-    update.message.reply_text(
+    await update.message.reply_text(
         "\U0001F4CA Bot statistikasi:\n"
         f"\U0001F465 Barcha userlar: {len(users)} ta\n"
         f"👥 Aktiv foydalanuvchilar (24 soat): {active_users_count} ta\n"
@@ -191,12 +190,12 @@ def save_channels(channels):
     REQUIRED_CHANNELS = channels
 
 # /start komandasi
-def start(update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
     update_user_activity(user_id)
-    if not check_membership(user_id, context):
-        send_subscription_message(update)
+    if not await check_membership(user_id, context):
+        await send_subscription_message(update, context)
         return
     from config import ADMIN_ID
     if user_id == ADMIN_ID:
@@ -206,7 +205,7 @@ def start(update, context):
             ["🎬 Kino joylash", "📢 Kanallar"]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        update.message.reply_text("🔐 Admin menyusi:", reply_markup=reply_markup)
+        await update.message.reply_text("🔐 Admin menyusi:", reply_markup=reply_markup)
     else:
         # Oddiy foydalanuvchilar uchun tugmalar
         keyboard = [
@@ -214,17 +213,17 @@ def start(update, context):
             ["ℹ️ Yordam"]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        update.message.reply_text("🎬 Salom! Kino kodini yuboring yoki quyidagi tugmalardan foydalaning:", reply_markup=reply_markup)
+        await update.message.reply_text("🎬 Salom! Kino kodini yuboring yoki quyidagi tugmalardan foydalaning:", reply_markup=reply_markup)
 
 # Statistika knopkasi uchun handler
-def stat_button_handler(update, context):
+async def stat_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    query.answer()
+    await query.answer()
     users = load_users()
     file_ids = load_file_ids()
     video_count = len(file_ids)
     active_users_count = get_active_users_count()
-    query.edit_message_text(
+    await query.edit_message_text(
         f"📊 Bot statistikasi:\n"
         f"👥 Foydalanuvchilar: {len(users)}\n"
         f"👤 Aktiv foydalanuvchilar (24 soat): {active_users_count} ta\n"
@@ -233,7 +232,7 @@ def stat_button_handler(update, context):
 
 
 # Kod kelganda – file_id bo'yicha yuboradi
-def handle_code(update, context):
+async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
     update_user_activity(user_id)
@@ -241,10 +240,10 @@ def handle_code(update, context):
     # Agar admin reklama kontentini yuborayotgan bo'lsa
     if user_id == ADMIN_ID and 'waiting_for_reklama' in context.user_data and context.user_data['waiting_for_reklama']:
         # Reklama kontenti kiritilganda uni qayta ishlash
-        return handle_ad_content(update, context)
+        return await handle_ad_content(update, context)
     
-    if not check_membership(user_id, context):
-        send_subscription_message(update)
+    if not await check_membership(user_id, context):
+        await send_subscription_message(update, context)
         return
     
     # Text yoki photo kelishi mumkin
@@ -313,26 +312,26 @@ def handle_code(update, context):
         await update.message.reply_text(f"❌ Xatolik: {str(e)}")
         
 # /users komandasi – foydalanuvchilar sonini ko'rsatadi
-def users_count(update, context):
+async def users_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
-    update.message.reply_text(f"👥 Bot foydalanuvchilari soni: {len(users)}")
+    await update.message.reply_text(f"👥 Bot foydalanuvchilari soni: {len(users)}")
 
 # Admin kanalga video tashlaganda – file_id ni avtomatik saqlaydi
-def check_membership(user_id, context):
+async def check_membership(user_id, context):
     for channel in REQUIRED_CHANNELS:
         # Agar username formatida bo'lsa, link emas, faqat username yoki ID
         chat_id = channel
         if channel.startswith("https://t.me/"):
             chat_id = "@" + channel.split("https://t.me/")[-1]
         try:
-            member = context.bot.get_chat_member(chat_id, user_id)
+            member = await context.bot.get_chat_member(chat_id, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 return False
         except Exception:
             return False
     return True
 
-def send_subscription_message(update):
+async def send_subscription_message(update: Update, context: ContextTypes.DEFAULT_TYPE = None):
     text = "👋 Botdan foydalanish uchun quyidagi kanallarga aʼzo bo'ling:"
     keyboard = []
     for channel in REQUIRED_CHANNELS:
@@ -348,15 +347,15 @@ def send_subscription_message(update):
     keyboard.append([InlineKeyboardButton("✅ Tasdiqlash", callback_data="check_membership")])
     keyboard_markup = InlineKeyboardMarkup(keyboard)
     text += "\nAʼzo bo'lgach, pastdagi 'Tasdiqlash' tugmasini bosing."
-    update.message.reply_text(text, reply_markup=keyboard_markup)
+    await update.message.reply_text(text, reply_markup=keyboard_markup)
 
 # Tasdiqlash knopkasi uchun handler
-def confirm_membership(update, context):
+async def confirm_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
-    query.answer()
-    if check_membership(user_id, context):
-        query.edit_message_text(
+    await query.answer()
+    if await check_membership(user_id, context):
+        await query.edit_message_text(
             "✅ Tabriklaymiz! Endi botdan foydalanishingiz mumkin.\n\n" 
             "🎬 Kino kodini yuboring."
         )
@@ -375,9 +374,9 @@ def confirm_membership(update, context):
             keyboard.append([InlineKeyboardButton(f"Aʼzo bo'lish ➡️", url=url)])
         keyboard.append([InlineKeyboardButton("✅ Tasdiqlash", callback_data="check_membership")])
         keyboard_markup = InlineKeyboardMarkup(keyboard)
-        query.edit_message_text(text + "\nAʼzo bo'lgach, pastdagi 'Tasdiqlash' tugmasini bosing.", reply_markup=keyboard_markup)
+        await query.edit_message_text(text + "\nAʼzo bo'lgach, pastdagi 'Tasdiqlash' tugmasini bosing.", reply_markup=keyboard_markup)
         
-def handle_channel_video(update, context):
+async def handle_channel_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.channel_post
     if not message:
         return
@@ -391,7 +390,7 @@ def handle_channel_video(update, context):
     save_file_id(code, file_id)
     print(f"✅ Saqlandi: {code} → {file_id}")
 
-def admin_menu(update, context):
+async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from config import ADMIN_ID
     user_id = update.effective_user.id
     if user_id == ADMIN_ID:
@@ -403,53 +402,53 @@ def admin_menu(update, context):
             [InlineKeyboardButton("📢 Majburiy kanallar", callback_data="manage_channels")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        update.message.reply_text("🔐 Admin menyusi:", reply_markup=reply_markup)
+        await update.message.reply_text("🔐 Admin menyusi:", reply_markup=reply_markup)
     else:
-        update.message.reply_text("❌ Siz admin emassiz.")
+        await update.message.reply_text("❌ Siz admin emassiz.")
         
 # Inline reklama tugmasi uchun handler
-def reklama_inline_handler(update, context):
+async def reklama_inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
-    query.answer()
+    await query.answer()
     if user_id != ADMIN_ID:
-        query.edit_message_text("Siz admin emassiz.")
+        await query.edit_message_text("Siz admin emassiz.")
         return ConversationHandler.END
-    query.edit_message_text("Reklama matnini yoki rasmini yuboring.")
+    await query.edit_message_text("Reklama matnini yoki rasmini yuboring.")
     # Reklama kutish holati sozlaymiz
     context.user_data['waiting_for_reklama'] = True
     return REKLAMA_WAIT
 
-def cancel_handler(update, context):
+async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the conversation and return to the main menu."""
-    update.message.reply_text("Amal bekor qilindi.")
+    await update.message.reply_text("Amal bekor qilindi.")
     return ConversationHandler.END
 
 # Kino joylash uchun funksiyalar
-def add_movie_handler(update, context):
+async def add_movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino joylash knopkasi bosilganda ishlaydi"""
     query = update.callback_query
     if query:  # Agar inline button orqali kelgan bo'lsa
         user_id = query.from_user.id
-        query.answer()
+        await query.answer()
         if user_id != ADMIN_ID:
-            query.edit_message_text("Siz admin emassiz.")
+            await query.edit_message_text("Siz admin emassiz.")
             return ConversationHandler.END
-        query.edit_message_text("Kino kodini kiriting (masalan: 123):")
+        await query.edit_message_text("Kino kodini kiriting (masalan: 123):")
         return WAITING_FOR_CODE
     else:  # Agar oddiy keyboard button orqali kelgan bo'lsa
         user_id = update.effective_user.id
         if user_id != ADMIN_ID:
-            update.message.reply_text("Siz admin emassiz.")
+            await update.message.reply_text("Siz admin emassiz.")
             return ConversationHandler.END
-        update.message.reply_text("Kino kodini kiriting (masalan: 123):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("Kino kodini kiriting (masalan: 123):", reply_markup=ReplyKeyboardRemove())
         return WAITING_FOR_CODE
 
-def get_movie_code(update, context):
+async def get_movie_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino kodi kiritilganda ishga tushadi"""
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        update.message.reply_text("Siz admin emassiz.")
+        await update.message.reply_text("Siz admin emassiz.")
         return ConversationHandler.END
         
     code = update.message.text.strip().lower()
@@ -458,26 +457,26 @@ def get_movie_code(update, context):
     # Kod mavjudligini tekshirish
     file_ids = load_file_ids()
     if code in file_ids:
-        update.message.reply_text(f"❗️ Bu kod ({code}) allaqachon mavjud.\n\nBoshqa kod kiriting yoki bekor qilish uchun /cancel bosing.")
+        await update.message.reply_text(f"❗️ Bu kod ({code}) allaqachon mavjud.\n\nBoshqa kod kiriting yoki bekor qilish uchun /cancel bosing.")
         return WAITING_FOR_CODE
         
-    update.message.reply_text(f"Endi {code} kodi uchun video yuboring:")
+    await update.message.reply_text(f"Endi {code} kodi uchun video yuboring:")
     return WAITING_FOR_VIDEO
     
-def get_movie_video(update, context):
+async def get_movie_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Video yuborilganda ishga tushadi"""
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        update.message.reply_text("Siz admin emassiz.")
+        await update.message.reply_text("Siz admin emassiz.")
         return ConversationHandler.END
         
     if not update.message.video:
-        update.message.reply_text("❌ Video yuborilmadi. Iltimos, video yuboring yoki bekor qilish uchun /cancel bosing.")
+        await update.message.reply_text("❌ Video yuborilmadi. Iltimos, video yuboring yoki bekor qilish uchun /cancel bosing.")
         return WAITING_FOR_VIDEO
         
     code = context.user_data.get('movie_code')
     if not code:
-        update.message.reply_text("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
+        await update.message.reply_text("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
         return ConversationHandler.END
         
     file_id = update.message.video.file_id
@@ -491,25 +490,25 @@ def get_movie_video(update, context):
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
-    update.message.reply_text(f"✅ Kino muvaffaqiyatli saqlandi!\n\nKod: {code}", reply_markup=reply_markup)
+    await update.message.reply_text(f"✅ Kino muvaffaqiyatli saqlandi!\n\nKod: {code}", reply_markup=reply_markup)
     return ConversationHandler.END
 
 # Kanal boshqarish funksiyalari
-def manage_channels(update, context):
+async def manage_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kanal boshqarish menyusi"""
     query = update.callback_query
     user_id = None
     
     if query:  # Inline button orqali kelgan
         user_id = query.from_user.id
-        query.answer()
+        await query.answer()
         if user_id != ADMIN_ID:
-            query.edit_message_text("Siz admin emassiz.")
+            await query.edit_message_text("Siz admin emassiz.")
             return ConversationHandler.END
     else:  # Oddiy keyboard button orqali kelgan
         user_id = update.effective_user.id
         if user_id != ADMIN_ID:
-            update.message.reply_text("Siz admin emassiz.")
+            await update.message.reply_text("Siz admin emassiz.")
             return ConversationHandler.END
     
     # Mavjud kanallar ro'yxatini chiqarish
@@ -530,40 +529,40 @@ def manage_channels(update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     if query:
-        query.edit_message_text(channels_text, reply_markup=reply_markup)
+        await query.edit_message_text(channels_text, reply_markup=reply_markup)
     else:
-        update.message.reply_text(channels_text, reply_markup=reply_markup)
+        await update.message.reply_text(channels_text, reply_markup=reply_markup)
     
     return CHANNEL_MENU
 
-def add_channel_command(update, context):
+async def add_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kanal qo'shish"""
     query = update.callback_query
-    query.answer()
+    await query.answer()
     
     if query.from_user.id != ADMIN_ID:
-        query.edit_message_text("Siz admin emassiz.")
+        await query.edit_message_text("Siz admin emassiz.")
         return ConversationHandler.END
     
-    query.edit_message_text("Qo'shiladigan kanal usernameni yoki ID ni kiriting:\n\n"
-                         "Masalan: @example_channel yoki -1001234567890\n\n"
-                         "Bekor qilish uchun /cancel bosing.")
+    await query.edit_message_text("Qo'shiladigan kanal usernameni yoki ID ni kiriting:\n\n"
+                                 "Masalan: @example_channel yoki -1001234567890\n\n"
+                                 "Bekor qilish uchun /cancel bosing.")
     return WAITING_FOR_CHANNEL
 
-def remove_channel_command(update, context):
+async def remove_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kanal o'chirish"""
     query = update.callback_query
-    query.answer()
+    await query.answer()
     
     if query.from_user.id != ADMIN_ID:
-        query.edit_message_text("Siz admin emassiz.")
+        await query.edit_message_text("Siz admin emassiz.")
         return ConversationHandler.END
     
     if not REQUIRED_CHANNELS:
-        query.edit_message_text("O'chirish uchun kanallar yo'q. Avval kanallarni qo'shing.")
+        await query.edit_message_text("O'chirish uchun kanallar yo'q. Avval kanallarni qo'shing.")
         keyboard = [[InlineKeyboardButton("🔙 Orqaga", callback_data="manage_channels")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        query.edit_message_reply_markup(reply_markup=reply_markup)
+        await query.edit_message_reply_markup(reply_markup=reply_markup)
         return CHANNEL_MENU
     
     # Kanallar ro'yxati
@@ -574,20 +573,20 @@ def remove_channel_command(update, context):
     keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="manage_channels")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    query.edit_message_text("O'chiriladigan kanalni tanlang:", reply_markup=reply_markup)
+    await query.edit_message_text("O'chiriladigan kanalni tanlang:", reply_markup=reply_markup)
     return CHANNEL_MENU
 
-def process_new_channel(update, context):
+async def process_new_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Yangi kanal qo'shish"""
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        update.message.reply_text("Siz admin emassiz.")
+        await update.message.reply_text("Siz admin emassiz.")
         return ConversationHandler.END
     
     new_channel = update.message.text.strip()
     
     if new_channel.startswith("/"):
-        update.message.reply_text("Kanal qo'shish bekor qilindi.")
+        await update.message.reply_text("Kanal qo'shish bekor qilindi.")
         return ConversationHandler.END
     
     # @ belgisi qo'yilganligini tekshirish
@@ -605,7 +604,7 @@ def process_new_channel(update, context):
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
-        update.message.reply_text(f"❗️ {new_channel} allaqachon ro'yxatda mavjud!", reply_markup=reply_markup)
+        await update.message.reply_text(f"❗️ {new_channel} allaqachon ro'yxatda mavjud!", reply_markup=reply_markup)
     else:
         channels = list(REQUIRED_CHANNELS)
         channels.append(new_channel)
@@ -619,23 +618,23 @@ def process_new_channel(update, context):
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
-        update.message.reply_text(f"✅ Kanal {new_channel} muvaffaqiyatli qo'shildi!", reply_markup=reply_markup)
+        await update.message.reply_text(f"✅ Kanal {new_channel} muvaffaqiyatli qo'shildi!", reply_markup=reply_markup)
     
     # Inline knopkalarni ko'rsatish
     inline_keyboard = [
         [InlineKeyboardButton("📢 Kanallarni boshqarish", callback_data="manage_channels")]
     ]
     inline_markup = InlineKeyboardMarkup(inline_keyboard)
-    update.message.reply_text("🔐 Boshqa amal tanlash uchun tugmalardan foydalaning:", reply_markup=inline_markup)
+    await update.message.reply_text("🔐 Boshqa amal tanlash uchun tugmalardan foydalaning:", reply_markup=inline_markup)
     return ConversationHandler.END
 
-def delete_channel(update, context):
+async def delete_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kanalni o'chirish"""
     query = update.callback_query
-    query.answer()
+    await query.answer()
     
     if query.from_user.id != ADMIN_ID:
-        query.edit_message_text("Siz admin emassiz.")
+        await query.edit_message_text("Siz admin emassiz.")
         return ConversationHandler.END
     
     # Callback data formatidan indeksni olish (delete_channel_X)
@@ -648,20 +647,20 @@ def delete_channel(update, context):
         channels.pop(index)
         save_channels(channels)
         
-        query.edit_message_text(f"✅ Kanal {channel} muvaffaqiyatli o'chirildi!")
+        await query.edit_message_text(f"✅ Kanal {channel} muvaffaqiyatli o'chirildi!")
     else:
-        query.edit_message_text("❌ Xatolik: kanal topilmadi.")
+        await query.edit_message_text("❌ Xatolik: kanal topilmadi.")
     
     # Kanal boshqarish menyusini qayta ko'rsatish
     keyboard = [[InlineKeyboardButton("🔙 Orqaga", callback_data="manage_channels")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    query.edit_message_reply_markup(reply_markup=reply_markup)
+    await query.edit_message_reply_markup(reply_markup=reply_markup)
     return CHANNEL_MENU
 
-def back_to_menu(update, context):
+async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Asosiy menyuga qaytish"""
     query = update.callback_query
-    query.answer()
+    await query.answer()
     
     # Admin menyusiga qaytish
     keyboard = [
@@ -672,34 +671,34 @@ def back_to_menu(update, context):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    query.edit_message_text("🔐 Admin menyusi:", reply_markup=reply_markup)
+    await query.edit_message_text("🔐 Admin menyusi:", reply_markup=reply_markup)
     return ConversationHandler.END
 
 # Foydalanuvchilar uchun kino qidirish funksiyasi
-def search_movie(update, context):
+async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kino qidirish funksiyasi"""
     user_id = update.effective_user.id
     save_user(user_id)
     update_user_activity(user_id)
     
     # A'zolikni tekshirish
-    if not check_membership(user_id, context):
-        send_subscription_message(update)
+    if not await check_membership(user_id, context):
+        await send_subscription_message(update, context)
         return
     
-    update.message.reply_text("🔍 Qidirmoqchi bo'lgan kino kodini yozing:")
+    await update.message.reply_text("🔍 Qidirmoqchi bo'lgan kino kodini yozing:")
     return
 
 # Yordam funksiyasi
-def help_command(update, context):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Yordam ko'rsatish funksiyasi"""
     user_id = update.effective_user.id
     save_user(user_id)
     update_user_activity(user_id)
     
     # A'zolikni tekshirish
-    if not check_membership(user_id, context):
-        send_subscription_message(update)
+    if not await check_membership(user_id, context):
+        await send_subscription_message(update, context)
         return
     
     help_text = (
@@ -709,5 +708,5 @@ def help_command(update, context):
         "Botdan foydalanish uchun majburiy kanallarga a'zo bo'ling!"
     )
     
-    update.message.reply_text(help_text, parse_mode="Markdown")
+    await update.message.reply_text(help_text, parse_mode="Markdown")
     return
