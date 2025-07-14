@@ -137,24 +137,31 @@ def health():
 # Webhook endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    global active_updates
+    global active_updates, telegram_app
     
     try:
         app.logger.info("🌐 Webhook so'rovi keldi")
+        app.logger.info(f"📋 Global telegram_app: {telegram_app}")
+        app.logger.info(f"📋 App initialized: {app_initialized}")
         
         # Rate limiting - juda ko'p concurrent update'larni oldini olish
         if active_updates >= max_concurrent_updates:
             app.logger.warning(f"⚠️ Juda ko'p active update'lar ({active_updates}), keyinroq qayta urining")
             return jsonify({"status": "busy", "message": "Too many concurrent updates"}), 429
         
-        try:
-            app_instance = create_application()
-            app.logger.info(f"📋 Application yaratildi: {app_instance}")
-        except Exception as app_error:
-            app.logger.error(f"❌ Application yaratishda xatolik: {app_error}")
-            import traceback
-            app.logger.error(traceback.format_exc())
-            return jsonify({"status": "error", "message": f"Application error: {str(app_error)}"}), 500
+        # Use global telegram_app if available, otherwise create new one
+        if telegram_app is not None and app_initialized:
+            app_instance = telegram_app
+            app.logger.info("✅ Using global telegram_app")
+        else:
+            try:
+                app_instance = create_application()
+                app.logger.info(f"📋 Application yaratildi: {app_instance}")
+            except Exception as app_error:
+                app.logger.error(f"❌ Application yaratishda xatolik: {app_error}")
+                import traceback
+                app.logger.error(traceback.format_exc())
+                return jsonify({"status": "error", "message": f"Application error: {str(app_error)}"}), 500
         
         if app_instance is None:
             app.logger.error("❌ Telegram application mavjud emas")
