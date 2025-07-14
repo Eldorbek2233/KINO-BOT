@@ -1,17 +1,25 @@
 from flask import Flask, request
-import threading
+import subprocess
+import sys
 import os
 import logging
 import time
+import threading
 from config import TOKEN
+
+# Log konfiguratsiyasi
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Flask app yaratish
 app = Flask(__name__)
 
-# Bot ishga tushirish uchun funksiya - subprocessda ishga tushiramiz
+# Bot ishga tushirish uchun funksiya
 def run_bot():
-    from bot import main
     try:
+        from bot import main
         main()
     except Exception as e:
         app.logger.error(f"Bot ishga tushishda xatolik: {str(e)}")

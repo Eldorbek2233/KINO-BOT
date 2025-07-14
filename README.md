@@ -1,5 +1,9 @@
 # Kino Bot - Telegram Bot
 
+## Muhim eslatma
+Bu bot Python-Telegram-Bot kutubxonasining 13.15 versiyasi bilan ishlaydi (20.x versiyasi emas).
+Version 13.15 da ayrim funksiyalar va API lardan foydalanish usuli boshqacha.
+
 ## Render.com ga o'rnatish
 
 ### 1. Render.com da yangi Web Service yaratish:
@@ -26,7 +30,10 @@ Quyidagi muhit o'zgaruvchilarini qo'shing:
 ### 5. Deploy:
 "Create Web Service" tugmasini bosing va botingiz deploy bo'lishini kuting.
 
-## Muhim eslatmalar
-- Bot 24/7 ishlashi uchun Free rejada ham Render.com avtomatik ravishda sleeping mode ga o'tkazmasdan ishlaydi
-- Botning environment o'zgaruvchilari to'g'ri kiritilganligiga ishonch hosil qiling
-- Bot xatoliklari ro'yxatini "Logs" bo'limidan tekshirishingiz mumkin
+## Xatoliklarni bartaraf etish
+
+1. `ModuleNotFoundError: No module named 'imghdr'` - bu xatolik yangi Python versiyalarida bo'ladi. Bunday holda `requirements.txt` ga Pillow kutubxonasini qo'shing.
+
+2. `AttributeError: 'Updater' object has no attribute '...'` - bu versiya nomuvofiqligidan kelib chiqadi. Kod python-telegram-bot'ning 13.15 versiyasi uchun moslab yozilgan.
+
+3. Render.com da bot ishlamaganda, web serverni qaytadan ishga tushiring va log larni tekshiring.
