@@ -24,6 +24,19 @@ def create_minimal_app():
         # Application yaratish
         app = Application.builder().token(TOKEN).build()
         
+        # Connection pool optimizations for Render
+        app = Application.builder().token(TOKEN)\
+            .pool_timeout(300)\
+            .connection_pool_size(32)\
+            .read_timeout(120)\
+            .write_timeout(120)\
+            .connect_timeout(120)\
+            .get_updates_pool_timeout(300)\
+            .get_updates_read_timeout(120)\
+            .get_updates_write_timeout(120)\
+            .get_updates_connect_timeout(120)\
+            .build()
+        
         # Faqat mavjud bo'lgan handlerlarni qo'shish
         from handlers import add_handlers
         add_handlers(app)
