@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import os
 import logging
 import asyncio
+import threading
 from telegram import Update
 from config import TOKEN
 
@@ -10,6 +11,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+logger = logging.getLogger(__name__)
 
 # Flask app yaratish
 app = Flask(__name__)
@@ -50,33 +53,25 @@ def create_application():
     global telegram_app
     if telegram_app is None:
         try:
+            app.logger.info("🔧 Telegram application yaratilmoqda...")
+            
             # Import from bot module
             from bot import main
             
             # Application yaratish - bot.py dan olish
             telegram_app = main()
             
-            # Application ni initialize qilish
-            import asyncio
+            if telegram_app is None:
+                raise Exception("Bot.main() None qaytardi")
             
-            # Event loop yaratish yoki mavjudini olish
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # Application ni initialize qilish
-            if not telegram_app.initialized:
-                loop.run_until_complete(telegram_app.initialize())
-            
-            app.logger.info("✅ Telegram application yaratildi va webhook uchun tayyor")
+            app.logger.info("✅ Telegram application muvaffaqiyatli yaratildi")
             
         except Exception as e:
             app.logger.error(f"❌ Application yaratishda xatolik: {e}")
             import traceback
             app.logger.error(traceback.format_exc())
-            raise
+            # Re-raise qilmaslik - application hali ham ishlashiga ruxsat berish
+            telegram_app = None
         
     return telegram_app
 
@@ -98,27 +93,56 @@ def webhook():
     try:
         app_instance = create_application()
         
+        if app_instance is None:
+            app.logger.error("❌ Telegram application mavjud emas")
+            return jsonify({"status": "error", "message": "Application not available"}), 500
+        
         # Get the update from request
         update_dict = request.get_json()
         if not update_dict:
             app.logger.warning("Webhook: Bo'sh JSON ma'lumot keldi")
             return jsonify({"status": "error", "message": "No JSON data"}), 400
             
-        update = Update.de_json(update_dict, app_instance.bot)
-        
-        # Process the update
-        import asyncio
-        
-        # Event loop yaratish yoki mavjudini olish
+        # Update yaratish
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            update = Update.de_json(update_dict, app_instance.bot)
+            app.logger.info(f"📥 Yangi update keldi: {update.update_id}")
+        except Exception as e:
+            app.logger.error(f"Update parse qilishda xatolik: {e}")
+            return jsonify({"status": "error", "message": "Invalid update format"}), 400
         
-        # Update ni process qilish
-        loop.run_until_complete(app_instance.process_update(update))
+        # Async task yaratish - blokingni oldini olish
+        import asyncio
+        import threading
         
+        def process_update_sync():
+            """Sync context da async update ni process qilish"""
+            try:
+                # Yangi event loop yaratish
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Application ni initialize qilish (agar kerak bo'lsa)
+                if not app_instance.initialized:
+                    loop.run_until_complete(app_instance.initialize())
+                
+                # Update ni process qilish
+                loop.run_until_complete(app_instance.process_update(update))
+                loop.close()
+                
+                app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi")
+                
+            except Exception as e:
+                app.logger.error(f"❌ Update process qilishda xatolik: {e}")
+                import traceback
+                app.logger.error(traceback.format_exc())
+        
+        # Background thread da ishga tushirish
+        thread = threading.Thread(target=process_update_sync)
+        thread.daemon = True
+        thread.start()
+        
+        # Tezkor javob - Telegram kutmaydi
         return jsonify({"status": "ok"})
         
     except Exception as e:
@@ -128,6 +152,23 @@ def webhook():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
-    # Production port yoki default 8080
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    try:
+        # Environment variables ni tekshirish
+        port = int(os.environ.get('PORT', 8080))
+        app.logger.info(f"🚀 Server {port} portda ishga tushirilmoqda...")
+        
+        # Application yaratish
+        create_application()
+        
+        # Flask server ishga tushirish
+        app.run(
+            host='0.0.0.0', 
+            port=port,
+            debug=False,  # Production uchun
+            threaded=True  # Threading yoqish
+        )
+        
+    except Exception as e:
+        print(f"❌ Server ishga tushirishda xatolik: {e}")
+        import traceback
+        traceback.print_exc()
