@@ -165,6 +165,28 @@ if __name__ == "__main__":
             web_server.create_application()
             print("✅ Telegram application tayyor")
             
+            # Webhook URL ni o'rnatish
+            render_url = os.getenv('RENDER_EXTERNAL_URL')
+            if not render_url:
+                render_url = f"https://kino-bot-o8dw.onrender.com"
+                print(f"🔗 RENDER_EXTERNAL_URL o'rnatildi: {render_url}")
+            
+            # Webhook o'rnatish
+            webhook_url = f"{render_url}/webhook"
+            print(f"📡 Webhook URL: {webhook_url}")
+            
+            import requests
+            url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
+            data = {"url": webhook_url}
+            
+            response = requests.post(url, data=data)
+            result = response.json()
+            
+            if result.get('ok'):
+                print(f"✅ Webhook o'rnatildi: {webhook_url}")
+            else:
+                print(f"❌ Webhook xatoligi: {result}")
+            
             print(f"🌐 Server 0.0.0.0:{port} da ishga tushdi")
             print("📡 Webhook endpoint: /webhook")
             print("❤️ Health check: /health")

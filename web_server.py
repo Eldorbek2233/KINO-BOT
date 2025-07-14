@@ -40,38 +40,10 @@ def handle_exception(e):
 
 # Global application object
 telegram_app = None
-webhook_set = False
 app_initialized = False  # Application initialize bo'lganligini kuzatish
 active_updates = 0      # Hozirda qaytarilayotgan update'lar soni
 max_concurrent_updates = 5  # Maksimal bir vaqtda qayta ishlanadigan update'lar
 update_timeout = 60  # Update processing timeout (60 soniya)
-
-def set_webhook_if_needed():
-    """Deploy qilingandan keyin webhook ni avtomatik o'rnatish"""
-    global webhook_set
-    
-    if webhook_set:
-        return
-        
-    render_url = os.getenv('RENDER_EXTERNAL_URL')
-    if render_url:
-        try:
-            import requests
-            webhook_url = f"{render_url}/webhook"
-            
-            url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
-            data = {"url": webhook_url}
-            
-            response = requests.post(url, data=data)
-            result = response.json()
-            
-            if result.get('ok'):
-                app.logger.info(f"✅ Webhook o'rnatildi: {webhook_url}")
-                webhook_set = True
-            else:
-                app.logger.error(f"❌ Webhook xatoligi: {result}")
-        except Exception as e:
-            app.logger.error(f"Webhook o'rnatishda xatolik: {e}")
 
 def create_application():
     """Create and configure the Telegram application"""
@@ -155,8 +127,6 @@ def create_application():
 # Asosiy sahifa
 @app.route('/')
 def index():
-    # Webhook ni tekshirish va o'rnatish
-    set_webhook_if_needed()
     return "Kino Bot ishlayapti! Webhook mode."
 
 # Health check endpoint
