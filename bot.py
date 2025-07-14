@@ -117,8 +117,9 @@ def main():
     builder = Application.builder()
     builder.token(TOKEN)
     
-    # Connection pool sozlamalari
-    builder.pool_timeout(30)
+    # Connection pool sozlamalari - webhook uchun optimallashtirilgan
+    builder.pool_timeout(60)        # Pool timeout ko'tarish
+    builder.connection_pool_size(8) # Pool size ko'tarish
     builder.read_timeout(30)
     builder.write_timeout(30)
     builder.connect_timeout(30)

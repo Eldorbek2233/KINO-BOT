@@ -20,6 +20,7 @@ app = Flask(__name__)
 # Global application object
 telegram_app = None
 webhook_set = False
+app_initialized = False  # Application initialize bo'lganligini kuzatish
 
 def set_webhook_if_needed():
     """Deploy qilingandan keyin webhook ni avtomatik o'rnatish"""
@@ -50,7 +51,7 @@ def set_webhook_if_needed():
 
 def create_application():
     """Create and configure the Telegram application"""
-    global telegram_app
+    global telegram_app, app_initialized
     if telegram_app is None:
         try:
             app.logger.info("🔧 Telegram application yaratilmoqda...")
@@ -64,43 +65,47 @@ def create_application():
             if telegram_app is None:
                 raise Exception("Bot.main() None qaytardi")
             
-            # PTB 20.0 uchun application ni initialize qilish
-            import asyncio
-            try:
-                # Synchronized initialization approach
-                async def init_app():
-                    """Application va Bot ni initialize qilish"""
-                    try:
-                        # Application ni initialize qilish
-                        if hasattr(telegram_app, 'initialize'):
-                            await telegram_app.initialize()
-                            app.logger.info("🔧 Application initialize qilindi")
-                        
-                        # Bot ni initialize qilish
-                        if hasattr(telegram_app, 'bot') and hasattr(telegram_app.bot, 'initialize'):
-                            await telegram_app.bot.initialize()
-                            app.logger.info("🤖 Bot initialize qilindi")
-                            
-                    except Exception as init_error:
-                        app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
-                        raise
-                
-                # Event loop yaratish va initialization
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
+            # PTB 20.0 uchun application ni faqat bir marta initialize qilish
+            if not app_initialized:
+                import asyncio
                 try:
-                    loop.run_until_complete(init_app())
-                finally:
-                    # Loop ni to'g'ri yopish
-                    try:
-                        loop.close()
-                    except:
-                        pass
+                    # Synchronized initialization approach
+                    async def init_app():
+                        """Application va Bot ni initialize qilish"""
+                        try:
+                            # Application ni initialize qilish
+                            if hasattr(telegram_app, 'initialize'):
+                                await telegram_app.initialize()
+                                app.logger.info("🔧 Application initialize qilindi")
+                            
+                            # Bot ni initialize qilish
+                            if hasattr(telegram_app, 'bot') and hasattr(telegram_app.bot, 'initialize'):
+                                await telegram_app.bot.initialize()
+                                app.logger.info("🤖 Bot initialize qilindi")
+                                
+                        except Exception as init_error:
+                            app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
+                            raise
                     
-            except Exception as init_error:
-                app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
-                # Continue anyway - ba'zi hollarda initialize qilmasdan ham ishlashi mumkin
+                    # Event loop yaratish va initialization
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    try:
+                        loop.run_until_complete(init_app())
+                        app_initialized = True  # Initialize muvaffaqiyatli bo'ldi
+                    finally:
+                        # Loop ni to'g'ri yopish
+                        try:
+                            loop.close()
+                        except:
+                            pass
+                        
+                except Exception as init_error:
+                    app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
+                    # Continue anyway - ba'zi hollarda initialize qilmasdan ham ishlashi mumkin
+            else:
+                app.logger.info("ℹ️ Application allaqachon initialize qilingan")
             
             app.logger.info("✅ Telegram application muvaffaqiyatli yaratildi")
             app.logger.info(f"📋 Application type: {type(telegram_app)}")
@@ -174,21 +179,8 @@ def webhook():
                 async def async_process():
                     """Async context da update ni process qilish"""
                     try:
-                        # Application va Bot ni initialize qilish (agar kerak bo'lsa)
-                        try:
-                            # Application initialize
-                            if hasattr(app_instance, 'initialize'):
-                                await app_instance.initialize()
-                            
-                            # Bot initialize  
-                            if hasattr(app_instance, 'bot') and hasattr(app_instance.bot, 'initialize'):
-                                await app_instance.bot.initialize()
-                                
-                        except Exception as init_err:
-                            app.logger.warning(f"⚠️ Runtime initialize: {init_err}")
-                            # Continue anyway
-                        
-                        # Update ni process qilish
+                        # Update ni to'g'ridan-to'g'ri process qilish
+                        # Initialize har safar emas, faqat birinchi marta qilinadi
                         await app_instance.process_update(update)
                         
                         app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi")
