@@ -38,9 +38,6 @@ def main():
     # Application yaratish
     application = Application.builder().token(TOKEN).build()
     
-    # Make sure polling cleanup is initialized
-    application._polling_cleanup_cb = None
-    
     # Set up handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("users", users_count))
@@ -105,12 +102,7 @@ def main():
     application.post_init = set_commands
 
     # Botni ishga tushirish
-    try:
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        print(f"Error in run_polling: {str(e)}")
-        print(f"Application attributes: {dir(application)}")
-        raise
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
     
     # No need to return application as we're using run_polling()
 
