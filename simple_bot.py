@@ -53,8 +53,9 @@ def main():
         
         # Create application
         telegram_app = create_minimal_app()
-        web_server.telegram_app = telegram_app
-        web_server.app_initialized = True
+        
+        # Set global telegram app in web_server
+        web_server.set_telegram_app(telegram_app)
         
         # Set webhook
         render_url = "https://kino-bot-o8dw.onrender.com"

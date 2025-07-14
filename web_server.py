@@ -45,6 +45,14 @@ active_updates = 0      # Hozirda qaytarilayotgan update'lar soni
 max_concurrent_updates = 5  # Maksimal bir vaqtda qayta ishlanadigan update'lar
 update_timeout = 60  # Update processing timeout (60 soniya)
 
+def set_telegram_app(app):
+    """Set global telegram app from external source"""
+    global telegram_app, app_initialized
+    telegram_app = app
+    app_initialized = True
+    app.logger.info(f"✅ Global telegram_app set: {telegram_app}")
+    app.logger.info(f"✅ App initialized: {app_initialized}")
+
 def create_application():
     """Create and configure the Telegram application"""
     global telegram_app, app_initialized
