@@ -17,22 +17,33 @@ logging.basicConfig(
 )
 
 async def set_commands(application):
-    # Admin uchun komandalar
-    admin_commands = [
-        BotCommand("start", "Botni boshlash"),
-        BotCommand("users", "Foydalanuvchilar soni"),
-        BotCommand("stat", "Bot statistikasi"),
-        BotCommand("admin_menu", "Admin menyusi")
-    ]
-    
     # Oddiy foydalanuvchilar uchun komandalar
     user_commands = [
         BotCommand("start", "Botni boshlash"),
         BotCommand("help", "Yordam")
     ]
     
+    # Admin uchun komandalar
+    admin_commands = [
+        BotCommand("start", "Botni boshlash"),
+        BotCommand("users", "Foydalanuvchilar soni"),
+        BotCommand("stat", "Bot statistikasi"),
+        BotCommand("admin_menu", "Admin menyusi"),
+        BotCommand("help", "Yordam")
+    ]
+    
     # Barcha foydalanuvchilar uchun komandalarni o'rnatish
     await application.bot.set_my_commands(user_commands)
+    
+    # Admin uchun alohida komandalar o'rnatish
+    try:
+        from telegram import BotCommandScopeChat
+        await application.bot.set_my_commands(
+            admin_commands, 
+            scope=BotCommandScopeChat(chat_id=ADMIN_ID)
+        )
+    except Exception as e:
+        print(f"Admin komandalarini o'rnatishda xatolik: {e}")
 
 def setup_handlers(application):
     """Setup all bot handlers"""

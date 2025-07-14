@@ -194,10 +194,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
     update_user_activity(user_id)
+    
+    # Debug: user_id va admin_id ni ko'rsatish
+    print(f"User ID: {user_id}, Admin ID: {ADMIN_ID}, Type user: {type(user_id)}, Type admin: {type(ADMIN_ID)}")
+    
     if not await check_membership(user_id, context):
         await send_subscription_message(update, context)
         return
-    from config import ADMIN_ID
+    
     if user_id == ADMIN_ID:
         keyboard = [
             ["📊 Statistika"],
