@@ -105,6 +105,10 @@ def setup_handlers(application):
     application.add_handler(CallbackQueryHandler(confirm_membership, pattern="^check_membership$"))
     application.add_handler(CallbackQueryHandler(stat_button_handler, pattern="^show_stat$"))
     
+    # Error handler qo'shish
+    from handlers import error_handler
+    application.add_error_handler(error_handler)
+    
     # Komandalarni o'rnatish
     application.post_init = set_commands
 

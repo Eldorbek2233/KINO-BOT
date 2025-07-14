@@ -67,28 +67,40 @@ def create_application():
             # PTB 20.0 uchun application ni initialize qilish
             import asyncio
             try:
-                # Event loop yaratish yoki mavjudini olish
+                # Synchronized initialization approach
+                async def init_app():
+                    """Application va Bot ni initialize qilish"""
+                    try:
+                        # Application ni initialize qilish
+                        if hasattr(telegram_app, 'initialize'):
+                            await telegram_app.initialize()
+                            app.logger.info("🔧 Application initialize qilindi")
+                        
+                        # Bot ni initialize qilish
+                        if hasattr(telegram_app, 'bot') and hasattr(telegram_app.bot, 'initialize'):
+                            await telegram_app.bot.initialize()
+                            app.logger.info("🤖 Bot initialize qilindi")
+                            
+                    except Exception as init_error:
+                        app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
+                        raise
+                
+                # Event loop yaratish va initialization
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_closed():
-                        raise RuntimeError("Loop is closed")
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                
-                # Application ni initialize qilish
-                if hasattr(telegram_app, 'initialize'):
-                    loop.run_until_complete(telegram_app.initialize())
-                    app.logger.info("🔧 Application initialize qilindi")
-                
-                # Bot ni initialize qilish
-                if hasattr(telegram_app, 'bot') and hasattr(telegram_app.bot, 'initialize'):
-                    loop.run_until_complete(telegram_app.bot.initialize())
-                    app.logger.info("🤖 Bot initialize qilindi")
+                    loop.run_until_complete(init_app())
+                finally:
+                    # Loop ni to'g'ri yopish
+                    try:
+                        loop.close()
+                    except:
+                        pass
                     
             except Exception as init_error:
                 app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
-                # Continue anyway
+                # Continue anyway - ba'zi hollarda initialize qilmasdan ham ishlashi mumkin
             
             app.logger.info("✅ Telegram application muvaffaqiyatli yaratildi")
             app.logger.info(f"📋 Application type: {type(telegram_app)}")
@@ -153,31 +165,50 @@ def webhook():
         def process_update_sync():
             """Sync context da async update ni process qilish"""
             try:
-                # Yangi event loop yaratish
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
                 app.logger.info("🔄 Update ni process qilish boshlandi...")
                 
-                # Application va Bot ni initialize qilish (agar kerak bo'lsa)
-                try:
-                    # Application initialize
-                    if hasattr(app_instance, 'initialize'):
-                        loop.run_until_complete(app_instance.initialize())
-                    
-                    # Bot initialize  
-                    if hasattr(app_instance, 'bot') and hasattr(app_instance.bot, 'initialize'):
-                        loop.run_until_complete(app_instance.bot.initialize())
+                # Thread-safe asyncio approach
+                import asyncio
+                import concurrent.futures
+                
+                async def async_process():
+                    """Async context da update ni process qilish"""
+                    try:
+                        # Application va Bot ni initialize qilish (agar kerak bo'lsa)
+                        try:
+                            # Application initialize
+                            if hasattr(app_instance, 'initialize'):
+                                await app_instance.initialize()
+                            
+                            # Bot initialize  
+                            if hasattr(app_instance, 'bot') and hasattr(app_instance.bot, 'initialize'):
+                                await app_instance.bot.initialize()
+                                
+                        except Exception as init_err:
+                            app.logger.warning(f"⚠️ Runtime initialize: {init_err}")
+                            # Continue anyway
                         
-                except Exception as init_err:
-                    app.logger.warning(f"⚠️ Runtime initialize: {init_err}")
-                    # Continue anyway
+                        # Update ni process qilish
+                        await app_instance.process_update(update)
+                        
+                        app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi")
+                        
+                    except Exception as e:
+                        app.logger.error(f"❌ Async update process xatolik: {e}")
+                        import traceback
+                        app.logger.error(traceback.format_exc())
                 
-                # Update ni process qilish
-                loop.run_until_complete(app_instance.process_update(update))
-                loop.close()
-                
-                app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi")
+                # Yangi event loop yaratish va ishlatish
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(async_process())
+                finally:
+                    # Loop ni to'g'ri yopish
+                    try:
+                        loop.close()
+                    except:
+                        pass
                 
             except Exception as e:
                 app.logger.error(f"❌ Update process qilishda xatolik: {e}")

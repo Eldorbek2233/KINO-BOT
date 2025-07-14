@@ -714,3 +714,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(help_text, parse_mode="Markdown")
     return
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Global error handler - barcha xatoliklarni log qilish"""
+    import logging
+    import traceback
+    
+    logger = logging.getLogger(__name__)
+    
+    # Error ma'lumotlarini log qilish
+    logger.error(f"Update {update.update_id if update else 'None'} caused error: {context.error}")
+    
+    # Traceback ni log qilish
+    if context.error:
+        logger.error("".join(traceback.format_exception(type(context.error), context.error, context.error.__traceback__)))
+    
+    # Foydalanuvchiga xabar berish (agar update mavjud bo'lsa)
+    if update and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring."
+            )
+        except Exception as e:
+            logger.error(f"Error handler o'zida xatolik: {e}")
