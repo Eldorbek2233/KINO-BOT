@@ -1,5 +1,20 @@
-from flask import Flask, request, jsonify
-import os
+from flask import Flask, re# Global error handler
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"500 Internal Server Error: {error}")
+    return jsonify({"status": "error", "message": "Internal server error"}), 200
+
+@app.errorhandler(404)
+def not_found(error):
+    logger.warning(f"404 Not Found: {error}")
+    return jsonify({"status": "error", "message": "Not found"}), 404
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {e}")
+    import traceback
+    logger.error(traceback.format_exc())
+    return jsonify({"status": "error", "message": "Internal server error"}), 500mport os
 import logging
 import asyncio
 import threading
@@ -28,19 +43,19 @@ if RAILWAY_ENV:
 # Global error handler
 @app.errorhandler(500)
 def internal_error(error):
-    app.logger.error(f"500 Internal Server Error: {error}")
+    logger.error(f"500 Internal Server Error: {error}")
     return jsonify({"status": "error", "message": "Internal server error"}), 200
 
 @app.errorhandler(404)
 def not_found(error):
-    app.logger.warning(f"404 Not Found: {error}")
+    logger.warning(f"404 Not Found: {error}")
     return jsonify({"status": "error", "message": "Not found"}), 404
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    app.logger.error(f"Unhandled exception: {e}")
+    logger.error(f"Unhandled exception: {e}")
     import traceback
-    app.logger.error(traceback.format_exc())
+    logger.error(traceback.format_exc())
     return jsonify({"status": "error", "message": "Server error"}), 200
 
 # Global application object
@@ -55,15 +70,15 @@ def set_telegram_app(app):
     global telegram_app, app_initialized
     telegram_app = app
     app_initialized = True
-    app.logger.info(f"✅ Global telegram_app set: {telegram_app}")
-    app.logger.info(f"✅ App initialized: {app_initialized}")
+    logger.info(f"✅ Global telegram_app set: {telegram_app}")
+    logger.info(f"✅ App initialized: {app_initialized}")
 
 def create_application():
     """Create and configure the Telegram application"""
     global telegram_app, app_initialized
     if telegram_app is None:
         try:
-            app.logger.info("🔧 Telegram application yaratilmoqda...")
+            logger.info("🔧 Telegram application yaratilmoqda...")
             
             # Direct Telegram application creation
             from telegram.ext import Application
@@ -86,15 +101,15 @@ def create_application():
                             # Application ni initialize qilish
                             if hasattr(telegram_app, 'initialize'):
                                 await telegram_app.initialize()
-                                app.logger.info("🔧 Application initialize qilindi")
+                                logger.info("🔧 Application initialize qilindi")
                             
                             # Bot ni initialize qilish
                             if hasattr(telegram_app, 'bot') and hasattr(telegram_app.bot, 'initialize'):
                                 await telegram_app.bot.initialize()
-                                app.logger.info("🤖 Bot initialize qilindi")
+                                logger.info("🤖 Bot initialize qilindi")
                                 
                         except Exception as init_error:
-                            app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
+                            logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
                             raise
                     
                     # Event loop yaratish va initialization
@@ -112,26 +127,26 @@ def create_application():
                             pass
                         
                 except Exception as init_error:
-                    app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
+                    logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
                     # Continue anyway - ba'zi hollarda initialize qilmasdan ham ishlashi mumkin
             else:
-                app.logger.info("ℹ️ Application allaqachon initialize qilingan")
+                logger.info("ℹ️ Application allaqachon initialize qilingan")
             
-            app.logger.info("✅ Telegram application muvaffaqiyatli yaratildi")
-            app.logger.info(f"📋 Application type: {type(telegram_app)}")
+            logger.info("✅ Telegram application muvaffaqiyatli yaratildi")
+            logger.info(f"📋 Application type: {type(telegram_app)}")
             
             # Application attributes ni debug qilish
             if hasattr(telegram_app, 'bot'):
                 try:
                     bot_info = f"Bot ID: {telegram_app.bot.id if hasattr(telegram_app.bot, 'id') else 'Unknown'}"
-                    app.logger.info(f"🤖 {bot_info}")
+                    logger.info(f"🤖 {bot_info}")
                 except:
-                    app.logger.info("🤖 Bot mavjud")
+                    logger.info("🤖 Bot mavjud")
             
         except Exception as e:
-            app.logger.error(f"❌ Application yaratishda xatolik: {e}")
+            logger.error(f"❌ Application yaratishda xatolik: {e}")
             import traceback
-            app.logger.error(traceback.format_exc())
+            logger.error(traceback.format_exc())
             # Exception ni re-raise qilish debugging uchun
             raise e
         
@@ -153,50 +168,50 @@ def webhook():
     global active_updates, telegram_app
     
     try:
-        app.logger.info("🌐 Webhook so'rovi keldi")
-        app.logger.info(f"📋 Global telegram_app: {telegram_app}")
-        app.logger.info(f"📋 App initialized: {app_initialized}")
+        logger.info("🌐 Webhook so'rovi keldi")
+        logger.info(f"📋 Global telegram_app: {telegram_app}")
+        logger.info(f"📋 App initialized: {app_initialized}")
         
         # Rate limiting - juda ko'p concurrent update'larni oldini olish
         if active_updates >= max_concurrent_updates:
-            app.logger.warning(f"⚠️ Juda ko'p active update'lar ({active_updates}), keyinroq qayta urining")
+            logger.warning(f"⚠️ Juda ko'p active update'lar ({active_updates}), keyinroq qayta urining")
             return jsonify({"status": "busy", "message": "Too many concurrent updates"}), 429
         
         # Use global telegram_app if available, otherwise create new one
         if telegram_app is not None and app_initialized:
             app_instance = telegram_app
-            app.logger.info("✅ Using global telegram_app")
+            logger.info("✅ Using global telegram_app")
         else:
             try:
                 app_instance = create_application()
-                app.logger.info(f"📋 Application yaratildi: {app_instance}")
+                logger.info(f"📋 Application yaratildi: {app_instance}")
             except Exception as app_error:
-                app.logger.error(f"❌ Application yaratishda xatolik: {app_error}")
+                logger.error(f"❌ Application yaratishda xatolik: {app_error}")
                 import traceback
-                app.logger.error(traceback.format_exc())
+                logger.error(traceback.format_exc())
                 return jsonify({"status": "error", "message": f"Application error: {str(app_error)}"}), 500
         
         if app_instance is None:
-            app.logger.error("❌ Telegram application mavjud emas")
+            logger.error("❌ Telegram application mavjud emas")
             return jsonify({"status": "error", "message": "Application not available"}), 500
         
         # Get the update from request
         try:
             update_dict = request.get_json()
             if not update_dict:
-                app.logger.warning("Webhook: Bo'sh JSON ma'lumot keldi")
+                logger.warning("Webhook: Bo'sh JSON ma'lumot keldi")
                 return jsonify({"status": "error", "message": "No JSON data"}), 400
         except Exception as e:
-            app.logger.error(f"JSON parse xatolik: {e}")
+            logger.error(f"JSON parse xatolik: {e}")
             return jsonify({"status": "error", "message": "Invalid JSON"}), 400
             
         # Update yaratish
         try:
             update = Update.de_json(update_dict, app_instance.bot)
-            app.logger.info(f"📥 Yangi update keldi: {update.update_id}")
+            logger.info(f"📥 Yangi update keldi: {update.update_id}")
         except Exception as e:
-            app.logger.error(f"Update parse qilishda xatolik: {e}")
-            app.logger.error(f"Update data: {update_dict}")
+            logger.error(f"Update parse qilishda xatolik: {e}")
+            logger.error(f"Update data: {update_dict}")
             return jsonify({"status": "error", "message": "Invalid update format"}), 400
         
         # Async task yaratish - blokingni oldini olish
@@ -209,7 +224,7 @@ def webhook():
             
             try:
                 active_updates += 1  # Active update counter ko'tarish
-                app.logger.info(f"🔄 Update ni process qilish boshlandi... (Active: {active_updates})")
+                logger.info(f"🔄 Update ni process qilish boshlandi... (Active: {active_updates})")
                 
                 # Thread-safe asyncio approach
                 import asyncio
@@ -225,7 +240,7 @@ def webhook():
                         elif update.callback_query:
                             update_type = f"callback: {update.callback_query.data[:20] if update.callback_query.data else 'no_data'}"
                         
-                        app.logger.info(f"🔍 Processing {update_type} (ID: {update.update_id})")
+                        logger.info(f"🔍 Processing {update_type} (ID: {update.update_id})")
                         
                         # Update ni timeout bilan process qilish
                         import asyncio
@@ -240,17 +255,17 @@ def webhook():
                         )
                         
                         processing_time = time.time() - start_time
-                        app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi ({processing_time:.2f}s)")
+                        logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi ({processing_time:.2f}s)")
                         
                     except asyncio.TimeoutError:
                         processing_time = time.time() - start_time
-                        app.logger.error(f"⏰ Update {update.update_id} timeout - {update_timeout} soniyadan ko'p vaqt oldi ({processing_time:.2f}s)")
-                        app.logger.error(f"⏰ Timeout update type: {update_type}")
+                        logger.error(f"⏰ Update {update.update_id} timeout - {update_timeout} soniyadan ko'p vaqt oldi ({processing_time:.2f}s)")
+                        logger.error(f"⏰ Timeout update type: {update_type}")
                     except Exception as e:
                         processing_time = time.time() - start_time if 'start_time' in locals() else 0
-                        app.logger.error(f"❌ Async update process xatolik: {e} ({processing_time:.2f}s)")
+                        logger.error(f"❌ Async update process xatolik: {e} ({processing_time:.2f}s)")
                         import traceback
-                        app.logger.error(traceback.format_exc())
+                        logger.error(traceback.format_exc())
                 
                 # Yangi event loop yaratish va ishlatish
                 try:
@@ -265,12 +280,12 @@ def webhook():
                         pass
                 
             except Exception as e:
-                app.logger.error(f"❌ Update process qilishda xatolik: {e}")
+                logger.error(f"❌ Update process qilishda xatolik: {e}")
                 import traceback
-                app.logger.error(traceback.format_exc())
+                logger.error(traceback.format_exc())
             finally:
                 active_updates -= 1  # Active update counter pasaytirish
-                app.logger.info(f"🏁 Update qayta ishlash tugadi (Active: {active_updates})")
+                logger.info(f"🏁 Update qayta ishlash tugadi (Active: {active_updates})")
         
         # Background thread da ishga tushirish
         thread = threading.Thread(target=process_update_sync)
@@ -278,13 +293,13 @@ def webhook():
         thread.start()
         
         # Tezkor javob - Telegram kutmaydi (SUCCESS javobi)
-        app.logger.info("✅ Webhook javobi yuborildi")
+        logger.info("✅ Webhook javobi yuborildi")
         return jsonify({"status": "ok"}), 200
         
     except Exception as e:
-        app.logger.error(f"Webhook umumiy xatoligi: {str(e)}")
+        logger.error(f"Webhook umumiy xatoligi: {str(e)}")
         import traceback
-        app.logger.error(traceback.format_exc())
+        logger.error(traceback.format_exc())
         
         # Telegram uchun 200 javob qaytarish (xatolik bo'lsa ham)
         # Bu Telegram webhook'ni qayta ishlatishini oldini oladi
