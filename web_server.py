@@ -23,6 +23,7 @@ webhook_set = False
 app_initialized = False  # Application initialize bo'lganligini kuzatish
 active_updates = 0      # Hozirda qaytarilayotgan update'lar soni
 max_concurrent_updates = 5  # Maksimal bir vaqtda qayta ishlanadigan update'lar
+update_timeout = 60  # Update processing timeout (60 soniya)
 
 def set_webhook_if_needed():
     """Deploy qilingandan keyin webhook ni avtomatik o'rnatish"""
@@ -191,21 +192,37 @@ def webhook():
                 async def async_process():
                     """Async context da update ni process qilish"""
                     try:
+                        # Update type ni aniqlash
+                        update_type = "unknown"
+                        if update.message:
+                            update_type = f"message: {update.message.text[:20] if update.message.text else 'no_text'}"
+                        elif update.callback_query:
+                            update_type = f"callback: {update.callback_query.data[:20] if update.callback_query.data else 'no_data'}"
+                        
+                        app.logger.info(f"🔍 Processing {update_type} (ID: {update.update_id})")
+                        
                         # Update ni timeout bilan process qilish
                         import asyncio
+                        import time
                         
-                        # Update processing timeout (30 soniya)
+                        start_time = time.time()
+                        
+                        # Update processing timeout (60 soniya)
                         await asyncio.wait_for(
                             app_instance.process_update(update), 
-                            timeout=30.0
+                            timeout=update_timeout
                         )
                         
-                        app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi")
+                        processing_time = time.time() - start_time
+                        app.logger.info(f"✅ Update {update.update_id} muvaffaqiyatli qayta ishlandi ({processing_time:.2f}s)")
                         
                     except asyncio.TimeoutError:
-                        app.logger.error(f"⏰ Update {update.update_id} timeout - 30 soniyadan ko'p vaqt oldi")
+                        processing_time = time.time() - start_time
+                        app.logger.error(f"⏰ Update {update.update_id} timeout - {update_timeout} soniyadan ko'p vaqt oldi ({processing_time:.2f}s)")
+                        app.logger.error(f"⏰ Timeout update type: {update_type}")
                     except Exception as e:
-                        app.logger.error(f"❌ Async update process xatolik: {e}")
+                        processing_time = time.time() - start_time if 'start_time' in locals() else 0
+                        app.logger.error(f"❌ Async update process xatolik: {e} ({processing_time:.2f}s)")
                         import traceback
                         app.logger.error(traceback.format_exc())
                 
