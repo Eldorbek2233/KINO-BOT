@@ -201,26 +201,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Debug: user_id va admin_id ni ko'rsatish
     print(f"User ID: {user_id}, Admin ID: {ADMIN_ID}, Type user: {type(user_id)}, Type admin: {type(ADMIN_ID)}")
     
-    if not await check_membership(user_id, context):
-        await send_subscription_message(update, context)
-        return
-    
-    if user_id == ADMIN_ID:
-        keyboard = [
-            ["📊 Statistika"],
-            ["👥 Users", "🔐 Menu", "📣 Reklama"],
-            ["🎬 Kino joylash", "📢 Kanallar"]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text("🔐 Admin menyusi:", reply_markup=reply_markup)
-    else:
-        # Oddiy foydalanuvchilar uchun tugmalar
-        keyboard = [
-            ["🔍 Kino qidirish"],
-            ["ℹ️ Yordam"]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text("🎬 Salom! Kino kodini yuboring yoki quyidagi tugmalardan foydalaning:", reply_markup=reply_markup)
+    # Sodda javob - membership check o'chirilgan
+    try:
+        if user_id == ADMIN_ID:
+            keyboard = [
+                ["📊 Statistika"],
+                ["👥 Users", "🔐 Menu", "📣 Reklama"],
+                ["🎬 Kino joylash", "📢 Kanallar"]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text("🔐 Admin menyusi:", reply_markup=reply_markup)
+        else:
+            # Oddiy foydalanuvchilar uchun tugmalar
+            keyboard = [
+                ["🔍 Kino qidirish"],
+                ["ℹ️ Yordam"]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text("🎬 Salom! Kino kodini yuboring yoki quyidagi tugmalardan foydalaning:", reply_markup=reply_markup)
+        
+        logger.info(f"✅ Start command processed for user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Start command error: {e}")
+        await update.message.reply_text("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
 
 # Statistika knopkasi uchun handler
 async def stat_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -325,39 +329,9 @@ async def users_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Admin kanalga video tashlaganda – file_id ni avtomatik saqlaydi
 async def check_membership(user_id, context):
-    """Simplified membership check without timeout issues"""
-    try:
-        # Majburiy kanallar bo'sh bo'lsa, barcha foydalanuvchilarni ruxsat berish
-        if not REQUIRED_CHANNELS:
-            return True
-        
-        # Har bir kanal uchun a'zolikni tekshirish
-        for channel in REQUIRED_CHANNELS:
-            try:
-                # Timeout bilan membership check (3 soniya)
-                member = await asyncio.wait_for(
-                    context.bot.get_chat_member(channel, user_id),
-                    timeout=3.0
-                )
-                
-                # A'zo emas bo'lsa, False qaytarish
-                if member.status not in ["member", "administrator", "creator"]:
-                    return False
-                    
-            except asyncio.TimeoutError:
-                # Timeout bo'lsa, membership yo'q deb hisoblaymiz
-                logger.warning(f"⏰ Membership check timeout for channel {channel}")
-                return False
-            except Exception as e:
-                # Boshqa xatolik bo'lsa ham membership yo'q
-                logger.warning(f"❌ Membership check error for {channel}: {e}")
-                return False
-        
-        return True
-        
-    except Exception:
-        # Umumiy xatolik bo'lsa, membership yo'q
-        return False
+    """Temporarily disable membership check for testing"""
+    # Vaqtincha barcha foydalanuvchilarni ruxsat berish
+    return True
 
 async def send_subscription_message(update: Update, context: ContextTypes.DEFAULT_TYPE = None):
     text = "👋 Botdan foydalanish uchun quyidagi kanallarga aʼzo bo'ling:"
@@ -766,27 +740,14 @@ def add_handlers(app):
     """Barcha handlerlarni application ga qo'shish"""
     from telegram.ext import CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
     
-def add_handlers(app):
-    """Barcha handlerlarni application ga qo'shish"""
-    from telegram.ext import CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
+    # Test handler - darhol javob beradi
+    async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("✅ Bot ishlayapti! Test muvaffaqiyatli.")
     
     # Asosiy handlerlar
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("test", test_handler))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("admin_menu", admin_menu))
-    app.add_handler(CommandHandler("cancel", cancel_handler))
-    
-    # Reklama conversation handler
-    reklama_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("reklama", send_advertisement)],
-        states={
-            REKLAMA_WAIT: [MessageHandler(filters.TEXT | filters.PHOTO, handle_ad_content)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel_handler)],
-        allow_reentry=True,
-        per_message=False
-    )
-    app.add_handler(reklama_conv_handler)
     
     # Matn xabarlar uchun handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
