@@ -1,13 +1,9 @@
 from flask import Flask, request
-import subprocess
-import sys
 import os
 import logging
-import time
 import threading
+import time
 from config import TOKEN
-
-# No need for telegram_patch with v20.8
 
 # Log konfiguratsiyasi
 logging.basicConfig(
@@ -21,8 +17,20 @@ app = Flask(__name__)
 # Bot ishga tushirish uchun funksiya
 def run_bot():
     try:
-        from bot import main
-        main()  # Since main() is now a regular function, not async
+        # Simple retry mechanism
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                from bot import main
+                main()
+                break  # If successful, break out of retry loop
+            except Exception as e:
+                app.logger.error(f"Bot start attempt {attempt + 1} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(5)  # Wait 5 seconds before retry
+                else:
+                    app.logger.error("All retry attempts failed")
+                    raise
     except Exception as e:
         app.logger.error(f"Bot ishga tushishda xatolik: {str(e)}")
         import traceback
