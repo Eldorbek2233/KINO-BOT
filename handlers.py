@@ -210,7 +210,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ["🎬 Kino joylash", "📢 Kanallar"]
             ]
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-            await update.message.reply_text("🔐 Admin menyusi:", reply_markup=reply_markup)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="🔐 Admin menyusi:",
+                reply_markup=reply_markup
+            )
         else:
             # Oddiy foydalanuvchilar uchun tugmalar
             keyboard = [
@@ -218,13 +222,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ["ℹ️ Yordam"]
             ]
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-            await update.message.reply_text("🎬 Salom! Kino kodini yuboring yoki quyidagi tugmalardan foydalaning:", reply_markup=reply_markup)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="🎬 Salom! Kino kodini yuboring yoki quyidagi tugmalardan foydalaning:",
+                reply_markup=reply_markup
+            )
         
         logger.info(f"✅ Start command processed for user {user_id}")
         
     except Exception as e:
         logger.error(f"❌ Start command error: {e}")
-        await update.message.reply_text("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Xatolik yuz berdi. Qaytadan urinib ko'ring."
+            )
+        except Exception as send_error:
+            logger.error(f"❌ Error sending error message: {send_error}")
 
 # Statistika knopkasi uchun handler
 async def stat_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -742,7 +756,14 @@ def add_handlers(app):
     
     # Test handler - darhol javob beradi
     async def test_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("✅ Bot ishlayapti! Test muvaffaqiyatli.")
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="✅ Bot ishlayapti! Test muvaffaqiyatli."
+            )
+            logger.info(f"✅ Test command processed for user {update.effective_user.id}")
+        except Exception as e:
+            logger.error(f"❌ Test command error: {e}")
     
     # Asosiy handlerlar
     app.add_handler(CommandHandler("start", start))

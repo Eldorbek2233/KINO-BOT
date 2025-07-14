@@ -118,11 +118,21 @@ def webhook():
                     message_text = update.message.text or "No text"
                     logger.info(f"🔍 Processing message: {message_text} (ID: {update_id})")
                 
-                # Create new event loop
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                # Use existing event loop instead of creating new one
+                try:
+                    # Try to get existing loop
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed():
+                        # If closed, create new one
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                except RuntimeError:
+                    # No loop exists, create new one
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
                 
                 try:
+                    # Process update with timeout
                     loop.run_until_complete(
                         asyncio.wait_for(
                             telegram_app.process_update(update), 
@@ -140,8 +150,10 @@ def webhook():
                     import traceback
                     logger.error(traceback.format_exc())
                 finally:
+                    # Only close loop if we created it
                     try:
-                        loop.close()
+                        if not loop.is_running():
+                            loop.close()
                     except:
                         pass
                     
