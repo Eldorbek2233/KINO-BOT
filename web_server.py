@@ -7,6 +7,12 @@ import time
 import threading
 from config import TOKEN
 
+# First import the patch to avoid imghdr issues
+try:
+    import telegram_patch
+except Exception as e:
+    logging.error(f"Error importing telegram_patch: {str(e)}")
+
 # Log konfiguratsiyasi
 logging.basicConfig(
     level=logging.INFO,

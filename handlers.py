@@ -1,9 +1,14 @@
+# First import patch to avoid imghdr issues
+try:
+    import telegram_patch
+except Exception as e:
+    print(f"Error importing telegram_patch: {str(e)}")
+
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import ConversationHandler, CallbackContext
 import json
 import os
 import time
-import asyncio
 from config import ADMIN_ID, REQUIRED_CHANNELS
 
 REKLAMA_WAIT = 1
@@ -15,19 +20,19 @@ CHANNEL_MENU = 4
 WAITING_FOR_CHANNEL = 5
 
 # Boshlang'ich handler: /reklama bosilganda
-async def send_advertisement(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def send_advertisement(update, context):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("Siz admin emassiz.")
+        update.message.reply_text("Siz admin emassiz.")
         return ConversationHandler.END
-    await update.message.reply_text("Reklama matnini yoki rasmini yuboring.")
+    update.message.reply_text("Reklama matnini yoki rasmini yuboring.")
     return REKLAMA_WAIT
 
 # Reklama matni yoki rasmini qabul qilish handleri
-async def handle_ad_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_ad_content(update, context):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("Siz admin emassiz.")
+        update.message.reply_text("Siz admin emassiz.")
         if 'waiting_for_reklama' in context.user_data:
             context.user_data.pop('waiting_for_reklama')
         return ConversationHandler.END

@@ -1,3 +1,6 @@
+# First import the patch to avoid imghdr issues
+import telegram_patch
+
 from telegram import BotCommand, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, Filters, ConversationHandler
 from config import TOKEN, ADMIN_ID
