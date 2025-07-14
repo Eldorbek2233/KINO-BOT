@@ -133,8 +133,43 @@ def main():
 
 if __name__ == "__main__":
     try:
-        # Agar to'g'ridan-to'g'ri ishga tushirilsa, xabar ko'rsatamiz
-        print("Bot webhook mode uchun sozlangan. web_server.py orqali ishga tushiring.")
+        # Webhook mode uchun web_server.py ishlatish kerak
+        print("⚠️  Bot webhook mode uchun sozlangan!")
+        print("🚀 Web server ni ishga tushirish...")
+        
+        # web_server.py ni import qilib ishga tushirish
+        import web_server
+        
+        # Agar PORT environment variable bo'lsa, web server ishga tushirish
+        import os
+        if os.getenv('PORT') or os.getenv('RENDER_EXTERNAL_URL'):
+            print("🌐 Render environment aniqlandi, web server ishga tushirilmoqda...")
+            
+            # Environment variables ni tekshirish
+            port = int(os.environ.get('PORT', 8080))
+            print(f"🚀 Server {port} portda ishga tushirilmoqda...")
+            
+            # Application yaratish
+            print("🔧 Telegram application yaratilmoqda...")
+            web_server.create_application()
+            print("✅ Telegram application tayyor")
+            
+            print(f"🌐 Server 0.0.0.0:{port} da ishga tushdi")
+            print("📡 Webhook endpoint: /webhook")
+            print("❤️ Health check: /health")
+            print("🏠 Asosiy sahifa: /")
+            
+            # Flask server ishga tushirish
+            web_server.app.run(
+                host='0.0.0.0', 
+                port=port,
+                debug=False,  # Production uchun
+                threaded=True  # Threading yoqish
+            )
+        else:
+            print("💻 Local development uchun web_server.py ni alohida ishga tushiring:")
+            print("   python web_server.py")
+            
     except Exception as e:
         print(f"Error: {str(e)}")
         import traceback

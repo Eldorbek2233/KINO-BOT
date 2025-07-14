@@ -155,10 +155,18 @@ if __name__ == '__main__':
     try:
         # Environment variables ni tekshirish
         port = int(os.environ.get('PORT', 8080))
-        app.logger.info(f"🚀 Server {port} portda ishga tushirilmoqda...")
+        print(f"🚀 Server {port} portda ishga tushirilmoqda...")
+        logger.info(f"🚀 Server {port} portda ishga tushirilmoqda...")
         
         # Application yaratish
+        print("🔧 Telegram application yaratilmoqda...")
         create_application()
+        print("✅ Telegram application tayyor")
+        
+        print(f"🌐 Server http://localhost:{port} da ishga tushdi")
+        print("📡 Webhook endpoint: /webhook")
+        print("❤️ Health check: /health")
+        print("🏠 Asosiy sahifa: /")
         
         # Flask server ishga tushirish
         app.run(
