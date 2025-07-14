@@ -78,8 +78,8 @@ def main():
         if railway_url:
             webhook_url = f"https://{railway_url}/webhook"
         else:
-            # Fallback for other platforms
-            webhook_url = f"https://kino-bot-production.up.railway.app/webhook"
+            # Use the actual Railway domain
+            webhook_url = "https://web-production-d5427.up.railway.app/webhook"
         
         try:
             import requests
