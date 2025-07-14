@@ -49,7 +49,7 @@ telegram_app = None
 app_initialized = False
 active_updates = 0
 max_concurrent_updates = 5
-update_timeout = 60
+update_timeout = 30  # Timeout ni 30 soniyaga kamaytirish
 
 def set_telegram_app(app_instance):
     """Set global telegram app from external source"""
