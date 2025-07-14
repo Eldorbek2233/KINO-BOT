@@ -64,12 +64,42 @@ def create_application():
             if telegram_app is None:
                 raise Exception("Bot.main() None qaytardi")
             
+            # PTB 20.0 uchun application ni initialize qilish
+            import asyncio
+            try:
+                # Event loop yaratish yoki mavjudini olish
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed():
+                        raise RuntimeError("Loop is closed")
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # Application ni initialize qilish
+                if hasattr(telegram_app, 'initialize'):
+                    loop.run_until_complete(telegram_app.initialize())
+                    app.logger.info("🔧 Application initialize qilindi")
+                
+                # Bot ni initialize qilish
+                if hasattr(telegram_app, 'bot') and hasattr(telegram_app.bot, 'initialize'):
+                    loop.run_until_complete(telegram_app.bot.initialize())
+                    app.logger.info("🤖 Bot initialize qilindi")
+                    
+            except Exception as init_error:
+                app.logger.error(f"⚠️ Initialize qilishda muammo: {init_error}")
+                # Continue anyway
+            
             app.logger.info("✅ Telegram application muvaffaqiyatli yaratildi")
             app.logger.info(f"📋 Application type: {type(telegram_app)}")
             
             # Application attributes ni debug qilish
             if hasattr(telegram_app, 'bot'):
-                app.logger.info(f"🤖 Bot mavjud: {telegram_app.bot.username if hasattr(telegram_app.bot, 'username') else 'Unknown'}")
+                try:
+                    bot_info = f"Bot ID: {telegram_app.bot.id if hasattr(telegram_app.bot, 'id') else 'Unknown'}"
+                    app.logger.info(f"🤖 {bot_info}")
+                except:
+                    app.logger.info("🤖 Bot mavjud")
             
         except Exception as e:
             app.logger.error(f"❌ Application yaratishda xatolik: {e}")
@@ -127,9 +157,21 @@ def webhook():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 
-                # Application initialization ni skip qilish - faqat update ni process qilish
-                # PTB 20.0 da initialized atributi boshqacha ishlashi mumkin
                 app.logger.info("🔄 Update ni process qilish boshlandi...")
+                
+                # Application va Bot ni initialize qilish (agar kerak bo'lsa)
+                try:
+                    # Application initialize
+                    if hasattr(app_instance, 'initialize'):
+                        loop.run_until_complete(app_instance.initialize())
+                    
+                    # Bot initialize  
+                    if hasattr(app_instance, 'bot') and hasattr(app_instance.bot, 'initialize'):
+                        loop.run_until_complete(app_instance.bot.initialize())
+                        
+                except Exception as init_err:
+                    app.logger.warning(f"⚠️ Runtime initialize: {init_err}")
+                    # Continue anyway
                 
                 # Update ni process qilish
                 loop.run_until_complete(app_instance.process_update(update))
