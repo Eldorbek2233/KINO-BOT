@@ -109,7 +109,7 @@ def setup_handlers(application):
     application.post_init = set_commands
 
 def main():
-    # Application yaratish - boshqa usul bilan
+    # Application yaratish - webhook mode uchun
     builder = Application.builder()
     builder.token(TOKEN)
     
@@ -124,15 +124,18 @@ def main():
     # Setup handlers using the function
     setup_handlers(application)
     
-    print("🤖 Kino bot ishga tushdi...")  # Uzbek tilida
-
-    # Botni ishga tushirish
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("🤖 Kino bot webhook mode da tayyor...")  # Uzbek tilida
+    
+    # Webhook mode da polling ishlatmaymiz
+    # application.run_polling() ni olib tashlaymiz
+    
+    return application  # Web server uchun qaytaramiz
 
 if __name__ == "__main__":
     try:
-        main()
+        # Agar to'g'ridan-to'g'ri ishga tushirilsa, xabar ko'rsatamiz
+        print("Bot webhook mode uchun sozlangan. web_server.py orqali ishga tushiring.")
     except Exception as e:
-        print(f"Error starting bot: {str(e)}")
+        print(f"Error: {str(e)}")
         import traceback
         traceback.print_exc()

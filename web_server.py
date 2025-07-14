@@ -16,40 +16,55 @@ app = Flask(__name__)
 
 # Global application object
 telegram_app = None
+webhook_set = False
+
+def set_webhook_if_needed():
+    """Deploy qilingandan keyin webhook ni avtomatik o'rnatish"""
+    global webhook_set
+    
+    if webhook_set:
+        return
+        
+    render_url = os.getenv('RENDER_EXTERNAL_URL')
+    if render_url:
+        try:
+            import requests
+            webhook_url = f"{render_url}/webhook"
+            
+            url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
+            data = {"url": webhook_url}
+            
+            response = requests.post(url, data=data)
+            result = response.json()
+            
+            if result.get('ok'):
+                app.logger.info(f"✅ Webhook o'rnatildi: {webhook_url}")
+                webhook_set = True
+            else:
+                app.logger.error(f"❌ Webhook xatoligi: {result}")
+        except Exception as e:
+            app.logger.error(f"Webhook o'rnatishda xatolik: {e}")
 
 def create_application():
     """Create and configure the Telegram application"""
     global telegram_app
     if telegram_app is None:
-        # Import handlers and setup
-        from bot import setup_handlers
+        # Import from bot module
+        from bot import main, setup_handlers
         from telegram.ext import Application
         
-        # Application yaratish
-        builder = Application.builder()
-        builder.token(TOKEN)
+        # Application yaratish - bot.py dan olish
+        telegram_app = main()
         
-        # Connection pool sozlamalari
-        builder.pool_timeout(30)
-        builder.read_timeout(30)
-        builder.write_timeout(30)
-        builder.connect_timeout(30)
-        
-        telegram_app = builder.build()
-        
-        # Setup handlers
-        setup_handlers(telegram_app)
-        
-        # Initialize the application
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(telegram_app.initialize())
+        print("✅ Telegram application yaratildi va webhook uchun tayyor")
         
     return telegram_app
 
 # Asosiy sahifa
 @app.route('/')
 def index():
+    # Webhook ni tekshirish va o'rnatish
+    set_webhook_if_needed()
     return "Kino Bot ishlayapti! Webhook mode."
 
 # Health check endpoint
