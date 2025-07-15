@@ -17,16 +17,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Debug: Check TOKEN value
-logger.info(f"🔍 TOKEN debug - Length: {len(TOKEN) if TOKEN else 0}")
-logger.info(f"🔍 TOKEN debug - First 10 chars: {TOKEN[:10] if TOKEN else 'None'}")
-logger.info(f"🔍 BOT_TOKEN env var: {os.getenv('BOT_TOKEN', 'NOT SET')[:10] if os.getenv('BOT_TOKEN') else 'NOT SET'}")
+TOKEN_FROM_ENV = os.getenv('BOT_TOKEN') or os.getenv('TOKEN')
+logger.info(f"🔍 TOKEN from env - Length: {len(TOKEN_FROM_ENV) if TOKEN_FROM_ENV else 0}")
+logger.info(f"🔍 TOKEN from env - First 10 chars: {TOKEN_FROM_ENV[:10] if TOKEN_FROM_ENV else 'None'}")
+logger.info(f"🔍 Config TOKEN - Length: {len(TOKEN) if TOKEN else 0}")
+logger.info(f"🔍 Config TOKEN - First 10 chars: {TOKEN[:10] if TOKEN else 'None'}")
+logger.info(f"🔍 All env vars containing 'TOKEN': {[k for k in os.environ.keys() if 'TOKEN' in k.upper()]}")
 logger.info(f"🔍 ADMIN_ID env var: {os.getenv('ADMIN_ID', 'NOT SET')}")
-logger.info(f"🔍 Environment variables available: {list(os.environ.keys())}")
 
 def create_minimal_app():
     """Minimal Telegram application yaratish"""
     try:
         logger.info("🔧 Minimal Telegram application yaratilmoqda...")
+        
+        # Token validation
+        if not TOKEN:
+            logger.error("❌ TOKEN is None or empty!")
+            raise ValueError("BOT_TOKEN environment variable not set")
+        
+        if len(TOKEN) < 30:
+            logger.error(f"❌ TOKEN too short: {len(TOKEN)} chars")
+            raise ValueError("Invalid BOT_TOKEN - too short")
+        
+        logger.info(f"✅ Using TOKEN with length: {len(TOKEN)}")
         
         # Aggressive connection pool optimization for Render's resource constraints
         app = Application.builder().token(TOKEN)\
