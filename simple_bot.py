@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """
-Kino Bot - Minimal working version for Render deployment
+Kino Bot - Minimal working version for Railway deployment
 """
 
 import os
 import logging
 from telegram.ext import Application
-from config import TOKEN
+
+# Railway specific config import
+try:
+    from railway_config import get_token, get_admin_id
+    TOKEN = get_token()
+    ADMIN_ID = get_admin_id()
+    logger = logging.getLogger(__name__)
+    logger.info("✅ Using railway_config for token management")
+except ImportError:
+    # Fallback to normal config
+    from config import TOKEN, ADMIN_ID
+    logger = logging.getLogger(__name__)
+    logger.info("⚠️ Fallback to normal config")
 
 # Log konfiguratsiyasi
 logging.basicConfig(
@@ -30,18 +42,14 @@ def create_minimal_app():
     try:
         logger.info("🔧 Minimal Telegram application yaratilmoqda...")
         
-        # Token validation
-        if not TOKEN:
-            logger.error("❌ TOKEN is None or empty!")
-            raise ValueError("BOT_TOKEN environment variable not set")
+        # Token final validation
+        logger.info(f"📋 Final TOKEN length: {len(TOKEN) if TOKEN else 0}")
+        logger.info(f"📋 Final TOKEN preview: {TOKEN[:15] if TOKEN else 'None'}...")
         
-        if len(TOKEN) < 30:
-            logger.error(f"❌ TOKEN too short: {len(TOKEN)} chars")
-            raise ValueError("Invalid BOT_TOKEN - too short")
+        if not TOKEN or len(str(TOKEN)) < 30:
+            raise ValueError(f"Invalid TOKEN: {TOKEN}")
         
-        logger.info(f"✅ Using TOKEN with length: {len(TOKEN)}")
-        
-        # Aggressive connection pool optimization for Render's resource constraints
+        # Aggressive connection pool optimization for Railway's resource constraints
         app = Application.builder().token(TOKEN)\
             .pool_timeout(180)\
             .connection_pool_size(6)\
