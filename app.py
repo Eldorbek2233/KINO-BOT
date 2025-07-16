@@ -189,7 +189,7 @@ def handle_start(chat_id, user_id):
             ]
         }
     else:
-        # Regular user version without statistics
+        # Regular user version without inline keyboard
         start_text = f"""🎭 <b>Ultimate Professional Kino Bot V3.0</b>
 
 👋 Xush kelibsiz! Eng professional kino bot xizmatida!
@@ -208,12 +208,8 @@ def handle_start(chat_id, user_id):
 
 🎬 <b>Hoziroq kino kodi bilan boshlang!</b>"""
 
-        keyboard = {
-            'inline_keyboard': [
-                [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_movies'}],
-                [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
-            ]
-        }
+        # No keyboard for regular users
+        keyboard = None
     
     send_message(chat_id, start_text, keyboard)
 
@@ -395,7 +391,7 @@ def handle_movie_code(chat_id, user_id, code):
                 ]
             }
         else:
-            # Regular user version without statistics
+            # Regular user version without inline keyboard
             error_text = f"""❌ <b>{original_code}</b> kod topilmadi!
 
 📋 <b>Mavjud kodlar:</b> {codes_text}
@@ -404,14 +400,10 @@ def handle_movie_code(chat_id, user_id, code):
 • <code>#123</code>
 • <code>123</code>
 
-🔍 Barcha kodlar ro'yxatini ko'rish uchun tugmani bosing."""
+🔍 Kino kodini to'g'ri kiriting yoki /start buyrug'ini ishlating."""
 
-            keyboard = {
-                'inline_keyboard': [
-                    [{'text': '🎬 Barcha kinolar', 'callback_data': 'show_all_movies'}],
-                    [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}]
-                ]
-            }
+            # No keyboard for regular users
+            keyboard = None
         
         send_message(chat_id, error_text, keyboard)
 
@@ -525,7 +517,7 @@ def handle_text_message(chat_id, user_id, text):
                 ]
             }
         else:
-            # Regular user version without statistics
+            # Regular user version without inline keyboard
             help_text = f"""🤔 <b>Tushunmadim.</b>
 
 🔍 <b>Kino qidirish uchun:</b>
@@ -538,12 +530,8 @@ def handle_text_message(chat_id, user_id, text):
 
 💡 <b>Hozirda {len(movies_db)} ta kino mavjud!</b>"""
 
-            keyboard = {
-                'inline_keyboard': [
-                    [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
-                    [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
-                ]
-            }
+            # No keyboard for regular users
+            keyboard = None
         
         send_message(chat_id, help_text, keyboard)
 
