@@ -111,6 +111,11 @@ def handle_message(message):
         
         logger.info(f"💬 Message from {user_id}: {text}")
         
+        # Check if admin is in broadcast session
+        if user_id == ADMIN_ID and chat_id in broadcast_data:
+            handle_broadcast_content(chat_id, message)
+            return
+        
         # Handle commands
         if text == '/start':
             handle_start(chat_id, user_id)
@@ -628,9 +633,14 @@ def handle_broadcast_start(chat_id):
     
     text = """📢 <b>Reklama yuborish</b>
 
-📝 Reklama matnini yuboring yoki rasm bilan birga caption yuboring:
+📝 <b>Reklama kontentini yuboring:</b>
+• Matn yuboring (oddiy reklama)
+• Rasm + caption yuboring (rasmli reklama)
+• Video + caption yuboring (videoli reklama)
 
-💡 <b>Maslahat:</b> Reklama barcha bot foydalanuvchilariga yuboriladi."""
+💡 <b>Maslahat:</b> Reklama barcha bot foydalanuvchilariga yuboriladi.
+
+⚠️ <b>Diqqat:</b> Bu jarayon bekor qilinmaydigan bo'ladi!</b>"""
 
     keyboard = {
         'inline_keyboard': [
@@ -640,22 +650,149 @@ def handle_broadcast_start(chat_id):
     
     send_message(chat_id, text, keyboard)
 
+def handle_broadcast_content(chat_id, message):
+    """Handle broadcast content from admin"""
+    try:
+        if chat_id not in broadcast_data:
+            return
+            
+        session = broadcast_data[chat_id]
+        
+        if session['step'] == 'waiting_for_content':
+            # Store broadcast content
+            if 'photo' in message:
+                # Photo broadcast
+                photo = message['photo'][-1]  # Get highest resolution
+                file_id = photo['file_id']
+                caption = message.get('caption', '')
+                
+                session['type'] = 'photo'
+                session['file_id'] = file_id
+                session['caption'] = caption
+                
+                preview_text = f"""� <b>Rasmli reklama tayyor!</b>
+
+📝 <b>Caption:</b> {caption if caption else 'Caption yo\'q'}
+
+📊 <b>Yuborilish ma\'lumotlari:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Turi: Rasmli reklama
+
+✅ <b>Yuborishni tasdiqlaysizmi?</b>"""
+                
+            elif 'video' in message:
+                # Video broadcast  
+                video = message['video']
+                file_id = video['file_id']
+                caption = message.get('caption', '')
+                duration = video.get('duration', 0)
+                file_size = video.get('file_size', 0)
+                
+                session['type'] = 'video'
+                session['file_id'] = file_id
+                session['caption'] = caption
+                session['duration'] = duration
+                session['file_size'] = file_size
+                
+                size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
+                
+                preview_text = f"""🎬 <b>Videoli reklama tayyor!</b>
+
+📝 <b>Caption:</b> {caption if caption else 'Caption yo\'q'}
+📦 <b>Hajmi:</b> {size_mb:.1f} MB
+⏱ <b>Davomiyligi:</b> {duration} soniya
+
+📊 <b>Yuborilish ma\'lumotlari:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Turi: Videoli reklama
+
+✅ <b>Yuborishni tasdiqlaysizmi?</b>"""
+                
+            elif message.get('text'):
+                # Text broadcast
+                text = message.get('text', '')
+                
+                session['type'] = 'text'
+                session['text'] = text
+                
+                preview_text = f"""📝 <b>Matnli reklama tayyor!</b>
+
+📄 <b>Matn:</b> 
+{text}
+
+📊 <b>Yuborilish ma\'lumotlari:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Turi: Matnli reklama
+
+✅ <b>Yuborishni tasdiqlaysizmi?</b>"""
+            else:
+                send_message(chat_id, "❌ Noto'g'ri format! Matn, rasm yoki video yuboring.")
+                return
+            
+            session['step'] = 'waiting_for_confirmation'
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '✅ Ha, yuborish', 'callback_data': 'confirm_broadcast'}],
+                    [{'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'cancel_broadcast'}]
+                ]
+            }
+            
+            send_message(chat_id, preview_text, keyboard)
+            
+    except Exception as e:
+        logger.error(f"❌ Broadcast content error: {e}")
+        send_message(chat_id, "❌ Reklama qayta ishlashda xatolik!")
+
 def handle_broadcast_confirm(chat_id):
-    """Confirm and send broadcast"""
+    """Confirm and send broadcast to all users"""
     if chat_id not in broadcast_data:
         send_message(chat_id, "❌ Reklama ma'lumotlari topilmadi!")
         return
     
-    send_message(chat_id, "📡 Reklama yuborilmoqda...")
+    session = broadcast_data[chat_id]
     
-    # Simulate broadcast
-    success_count = len(users_db)
+    if session.get('step') != 'waiting_for_confirmation':
+        send_message(chat_id, "❌ Reklama hali tayyor emas!")
+        return
     
-    result_text = f"""✅ <b>Reklama yuborildi!</b>
+    send_message(chat_id, "📡 <b>Reklama yuborilmoqda...</b>\n\n⏳ Iltimos kuting...")
+    
+    # Send to all users
+    success_count = 0
+    error_count = 0
+    
+    for user_id in users_db.keys():
+        try:
+            if session['type'] == 'text':
+                # Send text message
+                result = send_message(int(user_id), session['text'])
+            elif session['type'] == 'photo':
+                # Send photo
+                result = send_photo(int(user_id), session['file_id'], session.get('caption'))
+            elif session['type'] == 'video':
+                # Send video
+                result = send_video(int(user_id), session['file_id'], session.get('caption'))
+            
+            if result:
+                success_count += 1
+            else:
+                error_count += 1
+                
+        except Exception as e:
+            logger.error(f"❌ Broadcast error for user {user_id}: {e}")
+            error_count += 1
+            continue
+    
+    # Send result
+    result_text = f"""✅ <b>Reklama yuborish yakunlandi!</b>
 
-📊 <b>Natija:</b>
-• Yuborildi: {success_count}
-• Xatolik: 0
+📊 <b>Natijalar:</b>
+• Muvaffaqiyatli: {success_count}
+• Xatolik: {error_count}
+• Jami: {len(users_db)}
+
+📈 <b>Muvaffaqiyat darajasi:</b> {(success_count/len(users_db)*100):.1f}%
 
 🎭 <b>Ultimate Professional Kino Bot</b>"""
 
@@ -664,6 +801,8 @@ def handle_broadcast_confirm(chat_id):
     # Clean up
     if chat_id in broadcast_data:
         del broadcast_data[chat_id]
+        
+    logger.info(f"✅ Broadcast completed: {success_count} success, {error_count} errors")
 
 def handle_broadcast_cancel(chat_id):
     """Cancel broadcast"""
@@ -924,6 +1063,33 @@ def send_video(chat_id, file_id, caption=None):
             
     except Exception as e:
         logger.error(f"❌ Send video exception: {e}")
+        return False
+
+def send_photo(chat_id, file_id, caption=None):
+    """Send photo via Telegram API"""
+    try:
+        import requests
+        url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+        data = {
+            "chat_id": chat_id,
+            "photo": file_id
+        }
+        
+        if caption:
+            data["caption"] = caption
+            data["parse_mode"] = "HTML"
+        
+        response = requests.post(url, data=data, timeout=30)
+        result = response.json()
+        
+        if result.get('ok'):
+            return True
+        else:
+            logger.error(f"❌ Send photo error: {result}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Send photo exception: {e}")
         return False
 
 def answer_callback(callback_id):
