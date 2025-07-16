@@ -353,7 +353,9 @@ def handle_movie_code(chat_id, user_id, code):
         available_codes = list(movies_db.keys())[:5]
         codes_text = ", ".join(available_codes) if available_codes else "Hozircha mavjud emas"
         
-        error_text = f"""❌ <b>{original_code}</b> kod topilmadi!
+        if user_id == ADMIN_ID:
+            # Admin version with statistics
+            error_text = f"""❌ <b>{original_code}</b> kod topilmadi!
 
 📋 <b>Mavjud kodlar:</b> {codes_text}
 
@@ -363,12 +365,31 @@ def handle_movie_code(chat_id, user_id, code):
 
 🔍 Barcha kodlar uchun /stat buyrug'ini ishlating."""
 
-        keyboard = {
-            'inline_keyboard': [
-                [{'text': '📊 Statistika', 'callback_data': 'show_stats'}],
-                [{'text': '🎬 Barcha kinolar', 'callback_data': 'show_all_movies'}]
-            ]
-        }
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '📊 Statistika', 'callback_data': 'show_stats'}],
+                    [{'text': '🎬 Barcha kinolar', 'callback_data': 'show_all_movies'}],
+                    [{'text': '👑 Admin Panel', 'callback_data': 'admin_menu'}]
+                ]
+            }
+        else:
+            # Regular user version without statistics
+            error_text = f"""❌ <b>{original_code}</b> kod topilmadi!
+
+📋 <b>Mavjud kodlar:</b> {codes_text}
+
+💡 <b>To'g'ri format:</b>
+• <code>#123</code>
+• <code>123</code>
+
+🔍 Barcha kodlar ro'yxatini ko'rish uchun tugmani bosing."""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '🎬 Barcha kinolar', 'callback_data': 'show_all_movies'}],
+                    [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}]
+                ]
+            }
         
         send_message(chat_id, error_text, keyboard)
 
@@ -452,25 +473,49 @@ def handle_text_message(chat_id, user_id, text):
     if text.strip() and (text.strip().startswith('#') or text.strip().isdigit()):
         handle_movie_code(chat_id, user_id, text)
     else:
-        # Unknown message
-        help_text = f"""🤔 <b>Tushunmadim.</b>
+        # Unknown message - different response for admin vs regular users
+        if user_id == ADMIN_ID:
+            # Admin version with all options
+            help_text = f"""🤔 <b>Tushunmadim.</b>
 
 🔍 <b>Kino qidirish uchun:</b>
 • Kino kodini yuboring: <code>#123</code>
 • Yoki raqam: <code>123</code>
 
-📊 <b>Komandalar:</b>
+📊 <b>Admin komandalar:</b>
 • /start - Bosh sahifa
+• /admin - Admin panel
 • /stat - Statistika
 
 💡 <b>Hozirda {len(movies_db)} ta kino mavjud!</b>"""
 
-        keyboard = {
-            'inline_keyboard': [
-                [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
-                [{'text': '📊 Statistika', 'callback_data': 'show_stats'}]
-            ]
-        }
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
+                    [{'text': '📊 Statistika', 'callback_data': 'show_stats'}],
+                    [{'text': '👑 Admin Panel', 'callback_data': 'admin_menu'}]
+                ]
+            }
+        else:
+            # Regular user version without statistics
+            help_text = f"""🤔 <b>Tushunmadim.</b>
+
+🔍 <b>Kino qidirish uchun:</b>
+• Kino kodini yuboring: <code>#123</code>
+• Yoki raqam: <code>123</code>
+
+📊 <b>Asosiy komandalar:</b>
+• /start - Bosh sahifa
+• Kino kodi yuborish
+
+💡 <b>Hozirda {len(movies_db)} ta kino mavjud!</b>"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
+                    [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
+                ]
+            }
         
         send_message(chat_id, help_text, keyboard)
 
