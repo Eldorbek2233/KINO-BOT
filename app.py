@@ -33,15 +33,29 @@ def load_data():
     global movie_codes, users_data
     
     try:
-        with open('file_ids.json', 'r') as f:
-            movie_codes = json.load(f)
-    except:
+        # Try to read file_ids.json
+        if os.path.exists('file_ids.json'):
+            with open('file_ids.json', 'r') as f:
+                movie_codes = json.load(f)
+                logger.info(f"📁 Loaded {len(movie_codes)} movie codes")
+        else:
+            movie_codes = {}
+            logger.info("📁 file_ids.json not found, using empty dict")
+    except Exception as e:
+        logger.error(f"❌ Error loading movie codes: {e}")
         movie_codes = {}
         
     try:
-        with open('users.json', 'r') as f:
-            users_data = json.load(f)
-    except:
+        # Try to read users.json
+        if os.path.exists('users.json'):
+            with open('users.json', 'r') as f:
+                users_data = json.load(f)
+                logger.info(f"👥 Loaded {len(users_data)} users")
+        else:
+            users_data = {}
+            logger.info("👥 users.json not found, using empty dict")
+    except Exception as e:
+        logger.error(f"❌ Error loading users data: {e}")
         users_data = {}
 
 def save_data():
@@ -49,22 +63,26 @@ def save_data():
     try:
         with open('file_ids.json', 'w') as f:
             json.dump(movie_codes, f, indent=2)
+        logger.info(f"💾 Saved {len(movie_codes)} movie codes")
     except Exception as e:
-        logger.error(f"Error saving movie codes: {e}")
+        logger.error(f"❌ Error saving movie codes: {e}")
         
     try:
         with open('users.json', 'w') as f:
             json.dump(users_data, f, indent=2)
+        logger.info(f"💾 Saved {len(users_data)} users")
     except Exception as e:
-        logger.error(f"Error saving users data: {e}")
+        logger.error(f"❌ Error saving users data: {e}")
 
 def save_user(user_id, username=None, first_name=None):
     """Save user data"""
+    import time
     users_data[str(user_id)] = {
         'username': username,
         'first_name': first_name,
         'last_seen': int(time.time())
     }
+    logger.info(f"👤 Saved user: {user_id} ({first_name})")
     save_data()
 
 def send_message_with_keyboard(chat_id, text, keyboard=None):
