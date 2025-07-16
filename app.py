@@ -113,6 +113,7 @@ def handle_message(message):
         
         # Check if admin is in broadcast session
         if user_id == ADMIN_ID and chat_id in broadcast_data:
+            logger.info(f"🔥 Admin in broadcast session, calling handle_broadcast_content")
             handle_broadcast_content(chat_id, message)
             return
         
@@ -629,7 +630,9 @@ def handle_callback(callback_query):
 
 def handle_broadcast_start(chat_id):
     """Start broadcast process"""
+    logger.info(f"🔥 Starting broadcast process for chat {chat_id}")
     broadcast_data[chat_id] = {'step': 'waiting_for_content'}
+    logger.info(f"🔥 Broadcast data set: {broadcast_data}")
     
     text = """📢 <b>Reklama yuborish</b>
 
@@ -653,10 +656,16 @@ def handle_broadcast_start(chat_id):
 def handle_broadcast_content(chat_id, message):
     """Handle broadcast content from admin"""
     try:
+        logger.info(f"🔥 Broadcast content handler called for chat {chat_id}")
+        logger.info(f"🔥 Broadcast data: {broadcast_data}")
+        logger.info(f"🔥 Message keys: {list(message.keys())}")
+        
         if chat_id not in broadcast_data:
+            logger.error(f"🔥 Chat {chat_id} not in broadcast_data!")
             return
             
         session = broadcast_data[chat_id]
+        logger.info(f"🔥 Session: {session}")
         
         if session['step'] == 'waiting_for_content':
             # Store broadcast content
