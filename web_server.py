@@ -21,10 +21,16 @@ logger = logging.getLogger(__name__)
 # Flask app yaratish
 app = Flask(__name__)
 
-# Railway environment detection
+# Environment detection (Railway, Render, yoki local)
 RAILWAY_ENV = os.getenv('RAILWAY_ENVIRONMENT')
+RENDER_ENV = os.getenv('RENDER_EXTERNAL_URL')
+
 if RAILWAY_ENV:
     logger.info(f"🚂 Railway environment detected: {RAILWAY_ENV}")
+elif RENDER_ENV:
+    logger.info(f"🎭 Render environment detected: {RENDER_ENV}")
+else:
+    logger.info("💻 Local environment detected")
 
 # Global error handler
 @app.errorhandler(500)

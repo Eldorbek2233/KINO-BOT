@@ -27,12 +27,28 @@ def create_app():
     import web_server
     web_server.set_telegram_app(telegram_app)
     
-    # Webhook o'rnatish
-    railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN')
-    if railway_url:
+    # Platform-specific webhook URL
+    webhook_url = None
+    
+    # Render platform
+    render_url = os.getenv('RENDER_EXTERNAL_URL')
+    if render_url:
+        webhook_url = f"{render_url}/webhook"
+    
+    # Railway platform
+    elif os.getenv('RAILWAY_PUBLIC_DOMAIN'):
+        railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN')
         webhook_url = f"https://{railway_url}/webhook"
-    else:
+    
+    # Default URLs
+    elif os.getenv('RAILWAY_ENVIRONMENT'):
         webhook_url = "https://web-production-d5427.up.railway.app/webhook"
+    elif os.getenv('PORT'):
+        webhook_url = "https://kino-bot-latest.onrender.com/webhook"
+    
+    if not webhook_url:
+        logger.error("❌ Could not determine webhook URL!")
+        return app
     
     try:
         import requests

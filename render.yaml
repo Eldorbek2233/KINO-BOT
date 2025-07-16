@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: kino-bot
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -c gunicorn.conf.py wsgi:application"
+    plan: free
+    envVars:
+      - key: BOT_TOKEN
+        value: "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
+      - key: ADMIN_ID
+        value: "5542016161"
+      - key: RENDER_ENVIRONMENT
+        value: "production"
+      - key: PORT
+        generateValue: true
+      - key: RENDER_EXTERNAL_URL
+        generateValue: true

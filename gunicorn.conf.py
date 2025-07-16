@@ -1,4 +1,4 @@
-# Gunicorn configuration file
+# Gunicorn configuration file - Railway & Render compatible
 import os
 
 # Server socket
@@ -28,6 +28,18 @@ proc_name = "kino-bot"
 # Server mechanics
 preload_app = True
 daemon = False
+
+# Platform detection for logging
+platform = "unknown"
+if os.getenv('RAILWAY_ENVIRONMENT'):
+    platform = "railway"
+elif os.getenv('RENDER_EXTERNAL_URL'):
+    platform = "render"
+
+print(f"🚀 Gunicorn starting on {platform} platform")
+print(f"📡 Binding to: {bind}")
+print(f"👥 Workers: {workers}")
+print(f"⏰ Timeout: {timeout}s")
 pidfile = None
 user = None
 group = None
