@@ -154,30 +154,31 @@ def main():
     if not webhook_url:
         logger.error("❌ Could not determine webhook URL!")
         return
+    
+    try:
+        import requests
+        response = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/setWebhook",
+            data={"url": webhook_url}
+        )
+        result = response.json()
         
-        try:
-            import requests
-            response = requests.post(
-                f"https://api.telegram.org/bot{TOKEN}/setWebhook",
-                data={"url": webhook_url}
-            )
-            result = response.json()
+        if result.get('ok'):
+            logger.info(f"✅ Webhook set: {webhook_url}")
+        else:
+            logger.error(f"❌ Webhook error: {result}")
             
-            if result.get('ok'):
-                logger.info(f"✅ Webhook set: {webhook_url}")
-            else:
-                logger.error(f"❌ Webhook error: {result}")
-                
-        except Exception as e:
-            logger.error(f"Webhook setup error: {e}")
-        
-        # Start Flask server
-        logger.info(f"🌐 Starting Flask server on 0.0.0.0:{port}")
-        web_server.app.run(
-            host='0.0.0.0',
-            port=port,
-            debug=False,
-            threaded=True
+    except Exception as e:
+        logger.error(f"Webhook setup error: {e}")
+    
+    # Start Flask server
+    logger.info(f"🌐 Starting Flask server on 0.0.0.0:{port}")
+    web_server.app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=False,
+        threaded=True
+    )
         )
     else:
         logger.info("💻 Local development mode")
