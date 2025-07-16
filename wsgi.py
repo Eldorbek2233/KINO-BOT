@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
-Gunicorn WSGI entry point for Railway production deployment
+Gunicorn WSGI entry point for Railway and Render deployment
 """
 
 import os
+import sys
 import logging
+
+# Add current directory to path for module imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import after path setup
 from web_server import app
 import simple_bot
 
