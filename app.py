@@ -27,11 +27,12 @@ users_db = {}
 movies_db = {}
 upload_sessions = {}
 broadcast_data = {}
+mandatory_channels = {}
 
 # Load data from files
 def load_database():
     """Load all databases"""
-    global users_db, movies_db
+    global users_db, movies_db, mandatory_channels
     try:
         # Load users
         if os.path.exists('users.json'):
@@ -44,6 +45,12 @@ def load_database():
             with open('file_ids.json', 'r', encoding='utf-8') as f:
                 movies_db = json.load(f)
                 logger.info(f"✅ Loaded {len(movies_db)} movies")
+        
+        # Load mandatory channels
+        if os.path.exists('channels.json'):
+            with open('channels.json', 'r', encoding='utf-8') as f:
+                mandatory_channels = json.load(f)
+                logger.info(f"✅ Loaded {len(mandatory_channels)} mandatory channels")
                 
     except Exception as e:
         logger.error(f"❌ Database load error: {e}")
@@ -56,6 +63,9 @@ def save_database():
         
         with open('file_ids.json', 'w', encoding='utf-8') as f:
             json.dump(movies_db, f, ensure_ascii=False, indent=2)
+        
+        with open('channels.json', 'w', encoding='utf-8') as f:
+            json.dump(mandatory_channels, f, ensure_ascii=False, indent=2)
             
         logger.info("✅ Database saved successfully")
     except Exception as e:
@@ -110,6 +120,11 @@ def handle_message(message):
         save_database()
         
         logger.info(f"💬 Message from {user_id}: {text}")
+        
+        # Check mandatory channels subscription (only for non-admin users)
+        if user_id != ADMIN_ID and not check_user_subscriptions(user_id):
+            send_subscription_message(chat_id, user_id)
+            return
         
         # Check if admin is in broadcast session  
         if user_id == ADMIN_ID and chat_id in broadcast_data and broadcast_data[chat_id].get('waiting'):
@@ -189,7 +204,7 @@ def handle_start(chat_id, user_id):
             ]
         }
     else:
-        # Regular user version without inline keyboard
+        # Regular user version without statistics
         start_text = f"""🎭 <b>Ultimate Professional Kino Bot V3.0</b>
 
 👋 Xush kelibsiz! Eng professional kino bot xizmatida!
@@ -208,8 +223,12 @@ def handle_start(chat_id, user_id):
 
 🎬 <b>Hoziroq kino kodi bilan boshlang!</b>"""
 
-        # No keyboard for regular users
-        keyboard = None
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_movies'}],
+                [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
+            ]
+        }
     
     send_message(chat_id, start_text, keyboard)
 
@@ -228,6 +247,7 @@ def handle_admin_menu(chat_id, user_id):
 📊 <b>Bot statistikasi:</b>
 • Foydalanuvchilar: {len(users_db)}
 • Kinolar: {len(movies_db)}
+• Majburiy kanallar: {len(mandatory_channels)}
 • Upload sessiyalar: {len(upload_sessions)}
 
 ⚙️ <b>Admin amallar:</b>"""
@@ -237,6 +257,7 @@ def handle_admin_menu(chat_id, user_id):
             [{'text': '📊 Batafsil statistika', 'callback_data': 'admin_stats'}],
             [{'text': '🎬 Kino yuklash', 'callback_data': 'upload_movie'}],
             [{'text': '📢 Reklama yuborish', 'callback_data': 'broadcast_ad'}],
+            [{'text': '📺 Kanal boshqaruvi', 'callback_data': 'manage_channels'}],
             [{'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}],
             [{'text': '🎭 Kinolar ro\'yxati', 'callback_data': 'list_movies'}],
             [{'text': '🔧 Test funksiya', 'callback_data': 'admin_test'}]
@@ -391,7 +412,7 @@ def handle_movie_code(chat_id, user_id, code):
                 ]
             }
         else:
-            # Regular user version without inline keyboard
+            # Regular user version without statistics
             error_text = f"""❌ <b>{original_code}</b> kod topilmadi!
 
 📋 <b>Mavjud kodlar:</b> {codes_text}
@@ -400,10 +421,14 @@ def handle_movie_code(chat_id, user_id, code):
 • <code>#123</code>
 • <code>123</code>
 
-🔍 Kino kodini to'g'ri kiriting yoki /start buyrug'ini ishlating."""
+🔍 Barcha kodlar ro'yxatini ko'rish uchun tugmani bosing."""
 
-            # No keyboard for regular users
-            keyboard = None
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '🎬 Barcha kinolar', 'callback_data': 'show_all_movies'}],
+                    [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}]
+                ]
+            }
         
         send_message(chat_id, error_text, keyboard)
 
@@ -481,6 +506,8 @@ def handle_text_message(chat_id, user_id, text):
             handle_upload_code(chat_id, text)
         elif session['step'] == 'waiting_for_title':
             handle_upload_title(chat_id, text)
+        elif session.get('type') == 'add_channel' and session['step'] == 'waiting_for_channel_id':
+            handle_add_channel_id(chat_id, text)
         return
     
     # For regular users, try to process as movie code
@@ -517,7 +544,7 @@ def handle_text_message(chat_id, user_id, text):
                 ]
             }
         else:
-            # Regular user version without inline keyboard
+            # Regular user version without statistics
             help_text = f"""🤔 <b>Tushunmadim.</b>
 
 🔍 <b>Kino qidirish uchun:</b>
@@ -530,8 +557,12 @@ def handle_text_message(chat_id, user_id, text):
 
 💡 <b>Hozirda {len(movies_db)} ta kino mavjud!</b>"""
 
-            # No keyboard for regular users
-            keyboard = None
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
+                    [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
+                ]
+            }
         
         send_message(chat_id, help_text, keyboard)
 
@@ -699,6 +730,34 @@ def handle_callback(callback_query):
 💡 <b>Maslahat:</b> Yuborgan kontentingiz darhol barcha foydalanuvchilarga yuboriladi!
 
 ⚠️ <b>Diqqat:</b> Tasdiqlash bosqichi yo'q - to'g'ridan-to'g'ri yuboriladi.""")
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data == 'manage_channels':
+            if user_id == ADMIN_ID:
+                show_channels_management(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data == 'add_channel':
+            if user_id == ADMIN_ID:
+                handle_add_channel_start(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data == 'remove_channel':
+            if user_id == ADMIN_ID:
+                show_remove_channel_menu(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data.startswith('remove_ch_'):
+            if user_id == ADMIN_ID:
+                channel_id = data.replace('remove_ch_', '')
+                remove_channel(chat_id, channel_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data == 'check_subscription':
+            handle_subscription_check(chat_id, user_id)
+        elif data == 'confirm_add_channel':
+            if user_id == ADMIN_ID:
+                confirm_add_channel(chat_id)
             else:
                 send_message(chat_id, "❌ Admin huquqi kerak!")
         elif data == 'list_users':
@@ -1338,6 +1397,306 @@ def answer_callback(callback_id):
     except Exception as e:
         logger.error(f"❌ Answer callback error: {e}")
         return False
+
+# Channel Management Functions
+def check_user_subscriptions(user_id):
+    """Check if user is subscribed to all mandatory channels"""
+    if not mandatory_channels:
+        return True  # No mandatory channels
+    
+    try:
+        import requests
+        
+        for channel_id, channel_info in mandatory_channels.items():
+            url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
+            data = {
+                "chat_id": channel_id,
+                "user_id": user_id
+            }
+            
+            response = requests.post(url, data=data, timeout=10)
+            result = response.json()
+            
+            if not result.get('ok'):
+                logger.warning(f"❌ Channel check failed for {channel_id}: {result}")
+                return False
+            
+            member = result.get('result', {})
+            status = member.get('status', '')
+            
+            # Check if user is member, administrator, or creator
+            if status not in ['member', 'administrator', 'creator']:
+                logger.info(f"❌ User {user_id} not subscribed to {channel_id}")
+                return False
+        
+        logger.info(f"✅ User {user_id} subscribed to all channels")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Subscription check error: {e}")
+        return False
+
+def send_subscription_message(chat_id, user_id):
+    """Send subscription requirement message"""
+    if not mandatory_channels:
+        return
+    
+    channels_text = "📺 <b>Botdan foydalanish uchun quyidagi kanallarga a'zo bo'ling:</b>\n\n"
+    
+    buttons = []
+    count = 1
+    
+    for channel_id, channel_info in mandatory_channels.items():
+        channel_name = channel_info.get('name', f'Kanal {count}')
+        channel_link = channel_info.get('link', f'https://t.me/{channel_id.replace("@", "")}')
+        
+        channels_text += f"{count}. <b>{channel_name}</b>\n"
+        buttons.append([{'text': f'📺 {channel_name}', 'url': channel_link}])
+        count += 1
+    
+    channels_text += "\n🔄 <b>A'zo bo'lgandan so'ng tekshirish tugmasini bosing!</b>"
+    
+    # Add check button
+    buttons.append([{'text': '✅ A\'zolikni tekshirish', 'callback_data': 'check_subscription'}])
+    
+    keyboard = {'inline_keyboard': buttons}
+    
+    send_message(chat_id, channels_text, keyboard)
+
+def show_channels_management(chat_id):
+    """Show channels management menu"""
+    channels_count = len(mandatory_channels)
+    
+    text = f"""📺 <b>Majburiy kanallar boshqaruvi</b>
+
+📊 <b>Hozirgi holat:</b>
+• Majburiy kanallar: {channels_count} ta
+
+⚙️ <b>Amallar:</b>"""
+    
+    if mandatory_channels:
+        text += "\n\n📋 <b>Hozirgi kanallar:</b>"
+        count = 1
+        for channel_id, channel_info in mandatory_channels.items():
+            channel_name = channel_info.get('name', f'Kanal {count}')
+            text += f"\n{count}. {channel_name} ({channel_id})"
+            count += 1
+    
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '➕ Kanal qo\'shish', 'callback_data': 'add_channel'}],
+            [{'text': '➖ Kanal o\'chirish', 'callback_data': 'remove_channel'}],
+            [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+        ]
+    }
+    
+    send_message(chat_id, text, keyboard)
+
+def handle_add_channel_start(chat_id):
+    """Start adding channel process"""
+    # Set upload session for channel addition
+    upload_sessions[chat_id] = {
+        'type': 'add_channel',
+        'step': 'waiting_for_channel_id',
+        'timestamp': int(time.time())
+    }
+    
+    text = """➕ <b>Yangi majburiy kanal qo'shish</b>
+
+📝 <b>Kanal ID yoki username ni yuboring:</b>
+
+💡 <b>Format misollari:</b>
+• <code>@kanalname</code>
+• <code>-1001234567890</code>
+• <code>https://t.me/kanalname</code>
+
+⚠️ <b>Eslatma:</b>
+• Bot kanal admini bo'lishi kerak
+• Kanal ochiq yoki bot qo'shilgan bo'lishi kerak"""
+    
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '❌ Bekor qilish', 'callback_data': 'manage_channels'}]
+        ]
+    }
+    
+    send_message(chat_id, text, keyboard)
+
+def handle_add_channel_id(chat_id, channel_input):
+    """Handle channel ID input"""
+    try:
+        # Clean channel input
+        channel_id = channel_input.strip()
+        
+        # Convert various formats to proper channel ID
+        if channel_id.startswith('https://t.me/'):
+            channel_id = '@' + channel_id.replace('https://t.me/', '')
+        elif not channel_id.startswith('@') and not channel_id.startswith('-'):
+            channel_id = '@' + channel_id
+        
+        # Test if channel exists and bot has access
+        import requests
+        url = f"https://api.telegram.org/bot{TOKEN}/getChat"
+        data = {"chat_id": channel_id}
+        
+        response = requests.post(url, data=data, timeout=10)
+        result = response.json()
+        
+        if not result.get('ok'):
+            error_msg = result.get('description', 'Kanal topilmadi')
+            send_message(chat_id, f"❌ <b>Xatolik:</b> {error_msg}\n\n💡 Bot kanal admini bo'lishi yoki kanal ochiq bo'lishi kerak!")
+            return
+        
+        # Get channel info
+        chat_info = result.get('result', {})
+        channel_name = chat_info.get('title', 'Noma\'lum kanal')
+        
+        # Store in session for confirmation
+        upload_sessions[chat_id].update({
+            'channel_id': channel_id,
+            'channel_name': channel_name,
+            'step': 'waiting_for_confirmation'
+        })
+        
+        text = f"""✅ <b>Kanal topildi!</b>
+
+📺 <b>Kanal ma'lumotlari:</b>
+• Nomi: {channel_name}
+• ID: <code>{channel_id}</code>
+
+🔄 <b>Bu kanalni majburiy qilishni tasdiqlaysizmi?</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '✅ Ha, qo\'shish', 'callback_data': 'confirm_add_channel'}],
+                [{'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'manage_channels'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Add channel error: {e}")
+        send_message(chat_id, "❌ Kanal qo'shishda xatolik yuz berdi!")
+
+def confirm_add_channel(chat_id):
+    """Confirm adding channel"""
+    if chat_id not in upload_sessions:
+        send_message(chat_id, "❌ Sessiya topilmadi!")
+        return
+    
+    session = upload_sessions[chat_id]
+    channel_id = session.get('channel_id')
+    channel_name = session.get('channel_name')
+    
+    # Add to mandatory channels
+    mandatory_channels[channel_id] = {
+        'name': channel_name,
+        'link': f'https://t.me/{channel_id.replace("@", "")}',
+        'added_time': int(time.time())
+    }
+    
+    # Save database
+    save_database()
+    
+    # Clean session
+    del upload_sessions[chat_id]
+    
+    text = f"""✅ <b>Kanal muvaffaqiyatli qo'shildi!</b>
+
+📺 <b>Qo'shilgan kanal:</b>
+• Nomi: {channel_name}
+• ID: <code>{channel_id}</code>
+
+🎯 <b>Endi barcha foydalanuvchilar bu kanalga a'zo bo'lishi majburiy!</b>"""
+    
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '📺 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}],
+            [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+        ]
+    }
+    
+    send_message(chat_id, text, keyboard)
+
+def show_remove_channel_menu(chat_id):
+    """Show remove channel menu"""
+    if not mandatory_channels:
+        text = """📺 <b>Kanal o'chirish</b>
+
+❌ <b>Hozircha majburiy kanallar yo'q!</b>
+
+💡 Avval kanal qo'shing, keyin o'chirishingiz mumkin."""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '➕ Kanal qo\'shish', 'callback_data': 'add_channel'}],
+                [{'text': '🔙 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        return
+    
+    text = """➖ <b>Majburiy kanal o'chirish</b>
+
+📋 <b>O'chiriladigan kanalni tanlang:</b>"""
+    
+    buttons = []
+    for channel_id, channel_info in mandatory_channels.items():
+        channel_name = channel_info.get('name', 'Noma\'lum')
+        buttons.append([{'text': f'❌ {channel_name}', 'callback_data': f'remove_ch_{channel_id}'}])
+    
+    buttons.append([{'text': '🔙 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}])
+    
+    keyboard = {'inline_keyboard': buttons}
+    
+    send_message(chat_id, text, keyboard)
+
+def remove_channel(chat_id, channel_id):
+    """Remove channel from mandatory list"""
+    if channel_id in mandatory_channels:
+        channel_name = mandatory_channels[channel_id].get('name', 'Noma\'lum')
+        del mandatory_channels[channel_id]
+        save_database()
+        
+        text = f"""✅ <b>Kanal o'chirildi!</b>
+
+📺 <b>O'chirilgan kanal:</b>
+• Nomi: {channel_name}
+• ID: <code>{channel_id}</code>
+
+🎯 <b>Endi bu kanal majburiy emas!</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '📺 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}],
+                [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+    else:
+        send_message(chat_id, "❌ Kanal topilmadi!")
+
+def handle_subscription_check(chat_id, user_id):
+    """Handle subscription check"""
+    if check_user_subscriptions(user_id):
+        send_message(chat_id, """✅ <b>Tabriklaymiz!</b>
+
+🎉 Siz barcha majburiy kanallarga a'zo bo'ldingiz!
+
+🎬 <b>Endi botdan to'liq foydalanishingiz mumkin:</b>
+• Kino kodlarini yuborish
+• Kinolar ro'yxatini ko'rish
+• Barcha funksiyalardan foydalanish
+
+💡 <b>Kino olish uchun kod yuboring:</b> <code>#123</code>""")
+        
+        # Send start menu
+        handle_start(chat_id, user_id)
+    else:
+        send_subscription_message(chat_id, user_id)
 
 def setup_webhook():
     """Setup webhook"""
