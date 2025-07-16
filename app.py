@@ -8,6 +8,7 @@ import sys
 import logging
 import json
 import time
+import requests
 from flask import Flask, request, jsonify
 
 # Configure logging
@@ -94,7 +95,6 @@ def send_message(chat_id, text):
             logger.error("❌ No TOKEN available")
             return False
             
-        import requests
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         data = {
             "chat_id": chat_id,
@@ -121,7 +121,6 @@ def send_message(chat_id, text):
 def send_message_with_keyboard(chat_id, text, keyboard=None):
     """Send message with inline keyboard"""
     try:
-        import requests
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         
         data = {
@@ -153,7 +152,6 @@ def send_message_with_keyboard(chat_id, text, keyboard=None):
 def send_video(chat_id, file_id, caption=""):
     """Send video file"""
     try:
-        import requests
         url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
         
         data = {
@@ -180,7 +178,6 @@ def send_video(chat_id, file_id, caption=""):
 def send_photo(chat_id, photo_id, caption=""):
     """Send photo"""
     try:
-        import requests
         url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
         
         data = {
@@ -206,7 +203,6 @@ def send_photo(chat_id, photo_id, caption=""):
 def send_photo_with_keyboard(chat_id, photo_id, caption, keyboard=None):
     """Send photo with keyboard"""
     try:
-        import requests
         url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
         
         data = {
@@ -236,7 +232,6 @@ def send_photo_with_keyboard(chat_id, photo_id, caption, keyboard=None):
 def answer_callback_query(callback_query_id, text=""):
     """Answer callback query"""
     try:
-        import requests
         url = f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery"
         
         data = {
@@ -349,14 +344,15 @@ def webhook():
             user_id = message.get('from', {}).get('id')
             username = message.get('from', {}).get('username')
             first_name = message.get('from', {}).get('first_name')
-            text = message.get('text', '')
+            text = message.get('text', '')  # Can be empty string or None
             
-            logger.info(f"💬 Message from {user_id} ({username}): {text}")
+            logger.info(f"💬 Message from {user_id} ({username}): '{text}'")
+            logger.info(f"💬 Message has: video={'video' in message}, photo={'photo' in message}, text={bool(text)}")
             
             # Save user
             save_user(user_id, username, first_name)
             
-            # Process commands
+            # Process commands - only if text exists
             if text == '/start':
                 logger.info(f"🎬 Processing /start for user {user_id}")
                 handle_start(chat_id, user_id, first_name)
@@ -366,9 +362,15 @@ def webhook():
             elif text == '/stat':
                 logger.info(f"📊 Processing /stat for user {user_id}")
                 handle_stats(chat_id, user_id)
-            elif text.startswith('#'):
-                logger.info(f"🎭 Processing movie request {text} for user {user_id}")
-                handle_movie_request(chat_id, text)
+            elif text and (text.startswith('#') or text.isdigit()):
+                # Auto-add # if user sent just numbers
+                if text.isdigit():
+                    code = f"#{text}"
+                    logger.info(f"🎭 Auto-added # to webhook code: '{code}'")
+                else:
+                    code = text
+                logger.info(f"🎭 Processing movie request '{code}' for user {user_id}")
+                handle_movie_request(chat_id, code)
             else:
                 logger.info(f"💬 Processing regular message for user {user_id}")
                 handle_regular_message(chat_id, user_id, text, message)
@@ -531,32 +533,51 @@ def handle_regular_message(chat_id, user_id, text, message):
     """Handle regular messages (file uploads, etc.)"""
     logger.info(f"🔍 handle_regular_message: user_id={user_id}, admin_id={ADMIN_ID}")
     
+    # Safely get text - could be None
+    if text is None:
+        text = ""
+    
+    # Log message details
+    logger.info(f"🔍 Message details:")
+    logger.info(f"  - text: '{text}'")
+    logger.info(f"  - has_video: {'video' in message if message else False}")
+    logger.info(f"  - has_photo: {'photo' in message if message else False}")
+    logger.info(f"  - message_keys: {list(message.keys()) if message else 'None'}")
+    
     # Check if admin is uploading a movie
     if user_id == ADMIN_ID:
-        logger.info(f"🔧 Admin message detected")
+        logger.info(f"🔧 ADMIN MESSAGE DETECTED")
+        logger.info(f"🔧 Current temp_video_data: {temp_video_data}")
+        logger.info(f"🔧 Chat {chat_id} in temp_video_data: {chat_id in temp_video_data}")
         
         # Check if waiting for movie title
         if chat_id in temp_video_data and temp_video_data[chat_id].get('waiting_for_title'):
-            logger.info(f"📝 Processing movie title: {text}")
-            finalize_movie_save(chat_id, text)
+            logger.info(f"📝 Processing movie title: '{text}'")
+            if text and text.strip():
+                finalize_movie_save(chat_id, text.strip())
+            else:
+                send_message(chat_id, "❌ Kino nomi bo'sh bo'lishi mumkin emas! Qayta yuboring:")
             return
             
-        if 'video' in message:
-            logger.info(f"🎬 Video detected: {message['video']['file_id']}")
-            # Admin sent a video - ask for movie code
+        # Check for video upload
+        if message and 'video' in message:
+            logger.info(f"🎬 VIDEO DETECTED!")
             video = message['video']
             file_id = video['file_id']
             duration = video.get('duration', 0)
             file_size = video.get('file_size', 0)
             
+            logger.info(f"🎬 Video details: file_id={file_id}, duration={duration}, size={file_size}")
+            
             # Store temporarily
             temp_video_data[chat_id] = {
                 'file_id': file_id,
                 'duration': duration,
-                'file_size': file_size
+                'file_size': file_size,
+                'waiting_for_code': True
             }
             
-            logger.info(f"💾 Stored video data for chat {chat_id}")
+            logger.info(f"💾 STORED video data for chat {chat_id}: {temp_video_data[chat_id]}")
             
             # Format file info
             size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
@@ -580,45 +601,96 @@ def handle_regular_message(chat_id, user_id, text, message):
                 ]
             }
             
-            send_message_with_keyboard(chat_id, info_text, keyboard)
+            send_result = send_message_with_keyboard(chat_id, info_text, keyboard)
+            logger.info(f"📤 Video confirmation sent: {send_result}")
+            return
             
-        elif text.startswith('#') and chat_id in temp_video_data and not temp_video_data[chat_id].get('waiting_for_title'):
-            logger.info(f"📁 Processing movie code: {text}")
-            # Admin sent movie code after video
-            code = text.strip().lower()
+        # Check for movie code (BOTH # and numbers)
+        if text and (text.strip().startswith('#') or text.strip().isdigit()):
+            logger.info(f"📁 MOVIE CODE DETECTED: '{text}'")
+            logger.info(f"📁 Temp video data state: {temp_video_data.get(chat_id, 'NOT_FOUND')}")
             
-            # Check if code already exists
-            if code in movie_codes:
-                keyboard = {
-                    "inline_keyboard": [
-                        [{"text": "✅ Ha, almashtirish", "callback_data": f"replace_{code}"}],
-                        [{"text": "❌ Yo'q, bekor qilish", "callback_data": "cancel_upload"}]
-                    ]
-                }
-                send_message_with_keyboard(chat_id, 
-                    f"⚠️ <b>{code}</b> kodi allaqachon mavjud!\n\nAlmashtirishni xohlaysizmi?", 
-                    keyboard)
+            # Auto-add # if user sent just numbers
+            if text.strip().isdigit():
+                code = f"#{text.strip()}"
+                logger.info(f"📁 Auto-added # to code: '{code}'")
             else:
-                temp_video_data[chat_id]['code'] = code
-                temp_video_data[chat_id]['waiting_for_title'] = True
-                send_message(chat_id, f"📝 <b>{code}</b> kodi uchun kino nomini yuboring:")
+                code = text.strip().lower()
+            
+            logger.info(f"📁 Final code: '{code}'")
+            
+            # Check if we have video data
+            if chat_id in temp_video_data:
+                video_data = temp_video_data[chat_id]
+                logger.info(f"📁 Video data found: {video_data}")
                 
-        elif 'photo' in message or (message.get('text') and len(message.get('text', '')) > 10):
-            # Admin might be sending advertisement
+                # Check if not waiting for title
+                if not video_data.get('waiting_for_title', False):
+                    logger.info(f"📁 Processing code for new upload")
+                    
+                    # Check if code already exists
+                    if code in movie_codes:
+                        logger.info(f"⚠️ Code '{code}' already exists, asking for replacement")
+                        keyboard = {
+                            "inline_keyboard": [
+                                [{"text": "✅ Ha, almashtirish", "callback_data": f"replace_{code}"}],
+                                [{"text": "❌ Yo'q, bekor qilish", "callback_data": "cancel_upload"}]
+                            ]
+                        }
+                        send_message_with_keyboard(chat_id, 
+                            f"⚠️ <b>{code}</b> kodi allaqachon mavjud!\n\nAlmashtirishni xohlaysizmi?", 
+                            keyboard)
+                    else:
+                        logger.info(f"✅ New code '{code}', asking for title")
+                        temp_video_data[chat_id]['code'] = code
+                        temp_video_data[chat_id]['waiting_for_title'] = True
+                        temp_video_data[chat_id]['waiting_for_code'] = False
+                        logger.info(f"💾 Updated temp data: {temp_video_data[chat_id]}")
+                        send_message(chat_id, f"📝 <b>{code}</b> kodi uchun kino nomini yuboring:")
+                else:
+                    logger.warning(f"❌ Already waiting for title, ignoring code")
+                    send_message(chat_id, "📝 Kino nomini yuboring (kod allaqachon qabul qilindi)!")
+            else:
+                logger.warning(f"❌ Code '{text}' sent but no video data found")
+                send_message(chat_id, "❌ Avval video yuboring, keyin kino kodini yuboring!")
+            return
+            
+        # Handle other admin messages
+        if message and 'photo' in message:
+            logger.info(f"📸 Photo from admin")
             if temp_ad_data.get(chat_id, {}).get('waiting_for_ad'):
                 logger.info(f"📢 Processing advertisement content")
                 handle_advertisement_content(chat_id, message)
             else:
+                logger.info(f"❓ Unexpected photo from admin")
+                send_message(chat_id, "ℹ️ Admin komandasi tanilmadi. /admin ni bosing.")
+        elif text and len(text) > 50:
+            logger.info(f"📝 Long text from admin")
+            if temp_ad_data.get(chat_id, {}).get('waiting_for_ad'):
+                logger.info(f"📢 Processing advertisement content")
+                handle_advertisement_content(chat_id, message)
+            else:
+                logger.info(f"❓ Unexpected long text from admin")
                 send_message(chat_id, "ℹ️ Admin komandasi tanilmadi. /admin ni bosing.")
         else:
-            logger.info(f"❓ Unknown admin message")
+            logger.info(f"❓ Unknown admin message: '{text}'")
             send_message(chat_id, "ℹ️ Admin komandasi tanilmadi. /admin ni bosing.")
     else:
         # Regular user
-        if text.startswith('#'):
-            handle_movie_request(chat_id, text)
+        logger.info(f"👤 REGULAR USER message")
+        if text and (text.strip().startswith('#') or text.strip().isdigit()):
+            # Auto-add # if user sent just numbers
+            if text.strip().isdigit():
+                code = f"#{text.strip()}"
+                logger.info(f"🎭 Auto-added # to user code: '{code}'")
+            else:
+                code = text.strip()
+            
+            logger.info(f"🎭 Movie request from user: '{code}'")
+            handle_movie_request(chat_id, code)
         else:
-            send_message(chat_id, "🤔 Tushunmadim. Kino kodi yuboring (masalan: #123) yoki /start bosing.")
+            logger.info(f"❓ Unknown user message: '{text}'")
+            send_message(chat_id, "🤔 Tushunmadim. Kino kodi yuboring (masalan: #123 yoki 123) yoki /start bosing.")
 
 def handle_advertisement_content(chat_id, message):
     """Handle advertisement content from admin"""
@@ -718,16 +790,17 @@ def finalize_movie_save(chat_id, title):
         send_message(chat_id, "❌ Kino saqlashda xatolik yuz berdi!")
 
 def handle_callback_query(chat_id, user_id, callback_data, message_id):
-    """Handle callback queries"""
-    logger.info(f"🔘 Processing callback: {callback_data} from user {user_id}")
-    logger.info(f"🔘 Admin ID check: user={user_id}, admin={ADMIN_ID}, match={user_id == ADMIN_ID}")
+    """Handle callback queries with improved error handling"""
+    logger.info(f"🔘 Processing callback: '{callback_data}' from user {user_id}")
+    logger.info(f"🔘 Admin check: user={user_id}, admin={ADMIN_ID}, is_admin={user_id == ADMIN_ID}")
     
     try:
         if callback_data == "stats":
-            logger.info(f"📊 Handling stats callback")
+            logger.info(f"📊 Stats callback")
             handle_stats(chat_id, user_id)
+            
         elif callback_data == "help":
-            logger.info(f"ℹ️ Handling help callback")
+            logger.info(f"ℹ️ Help callback")
             help_text = """ℹ️ <b>Professional Kino Bot Yordami</b>
 
 🔍 <b>Kino qidirish:</b>
@@ -741,77 +814,105 @@ def handle_callback_query(chat_id, user_id, callback_data, message_id):
 
 🎭 <b>Professional darajada xizmat!</b>"""
             send_message(chat_id, help_text)
+            
         elif callback_data == "admin_stats":
-            logger.info(f"📊 Admin stats callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"📊 Admin stats callback - checking permissions")
             if user_id == ADMIN_ID:
+                logger.info(f"✅ Admin access granted for stats")
                 handle_admin_stats(chat_id)
             else:
+                logger.warning(f"❌ Non-admin tried to access admin stats: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data == "upload_movie":
-            logger.info(f"🎬 Upload movie callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"🎬 Upload movie callback - checking permissions")
             if user_id == ADMIN_ID:
-                logger.info(f"🎬 Admin upload movie request")
+                logger.info(f"✅ Admin upload movie request granted")
                 send_message(chat_id, "🎬 Video faylni yuboring:")
             else:
+                logger.warning(f"❌ Non-admin tried to upload movie: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data == "send_ad":
-            logger.info(f"📢 Send ad callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"📢 Send ad callback - checking permissions")
             if user_id == ADMIN_ID:
+                logger.info(f"✅ Admin send ad request granted")
                 handle_send_advertisement(chat_id)
             else:
+                logger.warning(f"❌ Non-admin tried to send ad: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data == "users_list":
-            logger.info(f"👥 Users list callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"👥 Users list callback - checking permissions")
             if user_id == ADMIN_ID:
+                logger.info(f"✅ Admin users list request granted")
                 handle_users_list(chat_id)
             else:
+                logger.warning(f"❌ Non-admin tried to view users: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data == "movies_list":
-            logger.info(f"🗂 Movies list callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"🗂 Movies list callback - checking permissions")
             if user_id == ADMIN_ID:
+                logger.info(f"✅ Admin movies list request granted")
                 handle_movies_list(chat_id)
             else:
+                logger.warning(f"❌ Non-admin tried to view movies: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data == "cancel_upload":
-            logger.info(f"❌ Cancel upload callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"❌ Cancel upload callback - checking permissions")
             if user_id == ADMIN_ID:
                 if chat_id in temp_video_data:
                     del temp_video_data[chat_id]
                     logger.info(f"🗑 Cleared temp video data for {chat_id}")
                 send_message(chat_id, "❌ Kino yuklash bekor qilindi.")
             else:
+                logger.warning(f"❌ Non-admin tried to cancel upload: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data == "confirm_broadcast":
-            logger.info(f"✅ Confirm broadcast callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"✅ Confirm broadcast callback - checking permissions")
             if user_id == ADMIN_ID:
+                logger.info(f"✅ Admin broadcast confirm granted")
                 handle_confirm_broadcast(chat_id)
             else:
+                logger.warning(f"❌ Non-admin tried to confirm broadcast: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data == "cancel_broadcast":
-            logger.info(f"❌ Cancel broadcast callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"❌ Cancel broadcast callback - checking permissions")
             if user_id == ADMIN_ID:
                 if chat_id in temp_ad_data:
                     del temp_ad_data[chat_id]
                     logger.info(f"🗑 Cleared temp ad data for {chat_id}")
                 send_message(chat_id, "❌ Reklama yuborish bekor qilindi.")
             else:
+                logger.warning(f"❌ Non-admin tried to cancel broadcast: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         elif callback_data.startswith("replace_"):
-            logger.info(f"🔄 Replace callback: user={user_id}, admin={ADMIN_ID}")
+            logger.info(f"🔄 Replace callback - checking permissions")
             if user_id == ADMIN_ID:
                 code = callback_data.replace("replace_", "")
+                logger.info(f"🔄 Replace code: '{code}'")
                 if chat_id in temp_video_data:
                     temp_video_data[chat_id]['code'] = code
                     temp_video_data[chat_id]['waiting_for_title'] = True
+                    temp_video_data[chat_id]['waiting_for_code'] = False
                     send_message(chat_id, f"📝 <b>{code}</b> kodi uchun yangi kino nomini yuboring:")
-                    logger.info(f"🔄 Set replace mode for code {code}")
+                    logger.info(f"🔄 Set replace mode for code '{code}'")
                 else:
+                    logger.error(f"❌ No video data found for replace operation")
                     send_message(chat_id, "❌ Video ma'lumotlari topilmadi!")
             else:
+                logger.warning(f"❌ Non-admin tried to replace: {user_id}")
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         else:
-            logger.warning(f"⚠️ Unknown callback: {callback_data}")
+            logger.warning(f"⚠️ Unknown callback: '{callback_data}'")
             send_message(chat_id, f"❓ Noma'lum buyruq: {callback_data}")
+            
     except Exception as e:
         logger.error(f"❌ Callback handling error: {e}")
         import traceback
@@ -1045,7 +1146,6 @@ def setup_webhook():
         if webhook_url:
             webhook_url = f"{webhook_url}/webhook"
             
-            import requests
             response = requests.post(
                 f"https://api.telegram.org/bot{TOKEN}/setWebhook",
                 data={"url": webhook_url}
