@@ -148,6 +148,8 @@ def handle_message(message):
 
 def handle_start(chat_id, user_id):
     """Handle /start command"""
+    logger.info(f"🏁 Start command: user_id={user_id}, admin_id={ADMIN_ID}, is_admin={user_id == ADMIN_ID}")
+    
     if user_id == ADMIN_ID:
         # Admin version with statistics
         start_text = f"""🎭 <b>Ultimate Professional Kino Bot V3.0</b>
@@ -474,6 +476,8 @@ def handle_text_message(chat_id, user_id, text):
         handle_movie_code(chat_id, user_id, text)
     else:
         # Unknown message - different response for admin vs regular users
+        logger.info(f"🔍 Checking user {user_id} vs admin {ADMIN_ID}: {user_id == ADMIN_ID}")
+        
         if user_id == ADMIN_ID:
             # Admin version with all options
             help_text = f"""🤔 <b>Tushunmadim.</b>
