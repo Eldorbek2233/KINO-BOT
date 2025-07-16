@@ -111,10 +111,10 @@ def handle_message(message):
         
         logger.info(f"💬 Message from {user_id}: {text}")
         
-        # Check if admin is in broadcast session
-        if user_id == ADMIN_ID and chat_id in broadcast_data:
-            logger.info(f"🔥 Admin in broadcast session, calling handle_broadcast_content")
-            handle_broadcast_content(chat_id, message)
+        # Check if admin is in broadcast session  
+        if user_id == ADMIN_ID and chat_id in broadcast_data and broadcast_data[chat_id].get('waiting'):
+            # Admin is sending broadcast content - send immediately to all users
+            send_immediate_broadcast(chat_id, message)
             return
         
         # Handle commands
@@ -576,7 +576,18 @@ def handle_callback(callback_query):
                 send_message(chat_id, "❌ Admin huquqi kerak!")
         elif data == 'broadcast_ad':
             if user_id == ADMIN_ID:
-                handle_broadcast_start(chat_id)
+                # Set waiting mode for immediate broadcast
+                broadcast_data[chat_id] = {'waiting': True}
+                send_message(chat_id, """📢 <b>Reklama yuborish</b>
+
+📝 <b>Endi reklama kontentini yuboring:</b>
+• Matn (oddiy xabar)
+• Rasm + caption
+• Video + caption
+
+💡 <b>Maslahat:</b> Yuborgan kontentingiz darhol barcha foydalanuvchilarga yuboriladi!
+
+⚠️ <b>Diqqat:</b> Tasdiqlash bosqichi yo'q - to'g'ridan-to'g'ri yuboriladi.""")
             else:
                 send_message(chat_id, "❌ Admin huquqi kerak!")
         elif data == 'list_users':
@@ -628,11 +639,81 @@ def handle_callback(callback_query):
         logger.error(f"❌ Callback error: {e}")
         send_message(chat_id, "❌ Xatolik yuz berdi.")
 
+def send_immediate_broadcast(chat_id, message):
+    """Send broadcast immediately to all users"""
+    try:
+        # Clear broadcast mode
+        if chat_id in broadcast_data:
+            del broadcast_data[chat_id]
+            
+        send_message(chat_id, "📡 <b>Reklama yuborilmoqda...</b>\n\n⏳ Kuting...")
+        
+        success_count = 0
+        error_count = 0
+        
+        # Send to all users
+        for user_id in users_db.keys():
+            try:
+                target_chat_id = int(user_id)
+                
+                if 'photo' in message:
+                    # Send photo with caption
+                    photo = message['photo'][-1]  # Highest resolution
+                    file_id = photo['file_id']
+                    caption = message.get('caption', '')
+                    result = send_photo(target_chat_id, file_id, caption)
+                    
+                elif 'video' in message:
+                    # Send video with caption
+                    video = message['video']
+                    file_id = video['file_id']
+                    caption = message.get('caption', '')
+                    result = send_video(target_chat_id, file_id, caption)
+                    
+                elif message.get('text'):
+                    # Send text
+                    text = message.get('text')
+                    result = send_message(target_chat_id, text)
+                    
+                else:
+                    result = False
+                
+                if result:
+                    success_count += 1
+                else:
+                    error_count += 1
+                    
+            except Exception as e:
+                logger.error(f"❌ Broadcast error for user {user_id}: {e}")
+                error_count += 1
+                continue
+        
+        # Send results
+        total = len(users_db)
+        rate = (success_count / total * 100) if total > 0 else 0
+        
+        result_text = f"""✅ <b>Reklama yuborish tugallandi!</b>
+
+📊 <b>Natijalar:</b>
+• ✅ Muvaffaqiyat: {success_count}
+• ❌ Xatolik: {error_count} 
+• 📊 Jami: {total}
+• 📈 Foiz: {rate:.1f}%
+
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+
+        send_message(chat_id, result_text)
+        logger.info(f"✅ Immediate broadcast: {success_count} success, {error_count} errors")
+        
+    except Exception as e:
+        logger.error(f"❌ Immediate broadcast error: {e}")
+        send_message(chat_id, "❌ Reklama yuborishda xatolik!")
+        if chat_id in broadcast_data:
+            del broadcast_data[chat_id]
+
 def handle_broadcast_start(chat_id):
     """Start broadcast process"""
-    logger.info(f"🔥 Starting broadcast process for chat {chat_id}")
     broadcast_data[chat_id] = {'step': 'waiting_for_content'}
-    logger.info(f"🔥 Broadcast data set: {broadcast_data}")
     
     text = """📢 <b>Reklama yuborish</b>
 
@@ -656,16 +737,10 @@ def handle_broadcast_start(chat_id):
 def handle_broadcast_content(chat_id, message):
     """Handle broadcast content from admin"""
     try:
-        logger.info(f"🔥 Broadcast content handler called for chat {chat_id}")
-        logger.info(f"🔥 Broadcast data: {broadcast_data}")
-        logger.info(f"🔥 Message keys: {list(message.keys())}")
-        
         if chat_id not in broadcast_data:
-            logger.error(f"🔥 Chat {chat_id} not in broadcast_data!")
             return
             
         session = broadcast_data[chat_id]
-        logger.info(f"🔥 Session: {session}")
         
         if session['step'] == 'waiting_for_content':
             # Store broadcast content
