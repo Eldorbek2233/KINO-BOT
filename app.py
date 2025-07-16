@@ -9,7 +9,33 @@ import logging
 import json
 from flask import Flask, request, jsonify
 
-# Configure logging
+#        # Process callback queries
+        elif 'callback_query' in data:
+            callback = data['callback_query']
+            chat_id = callback.get('message', {}).get('chat', {}).get('id')
+            user_id = callback.get('from', {}).get('id')
+            callback_data = callback.get('data', '')
+            message_id = callback.get('message', {}).get('message_id')
+            callback_id = callback.get('id')
+            
+            logger.info(f"🔘 Callback received: data='{callback_data}', user={user_id}, chat={chat_id}")
+            logger.info(f"🔘 Full callback object: {callback}")
+            
+            # Answer callback query first
+            try:
+                answer_result = answer_callback_query(callback_id)
+                logger.info(f"✅ Callback answered: {answer_result}")
+            except Exception as e:
+                logger.error(f"❌ Failed to answer callback: {e}")
+            
+            # Process callback
+            try:
+                handle_callback_query(chat_id, user_id, callback_data, message_id)
+                logger.info(f"✅ Callback processed successfully")
+            except Exception as e:
+                logger.error(f"❌ Callback processing error: {e}")
+                import traceback
+                logger.error(f"❌ Callback traceback: {traceback.format_exc()}")ing
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -98,8 +124,11 @@ def send_message_with_keyboard(chat_id, text, keyboard=None):
         }
         
         if keyboard:
-            data["reply_markup"] = json.dumps(keyboard)
+            keyboard_json = json.dumps(keyboard)
+            data["reply_markup"] = keyboard_json
+            logger.info(f"⌨️ Sending keyboard: {keyboard_json}")
             
+        logger.info(f"📤 Sending message with keyboard to {chat_id}")
         response = requests.post(url, data=data, timeout=10)
         result = response.json()
         
@@ -112,6 +141,8 @@ def send_message_with_keyboard(chat_id, text, keyboard=None):
             
     except Exception as e:
         logger.error(f"❌ Send message error: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return False
 
 @app.route('/')
@@ -133,7 +164,24 @@ def debug():
         "token_present": bool(TOKEN),
         "token_length": len(TOKEN) if TOKEN else 0,
         "admin_id": ADMIN_ID,
-        "webhook_url": f"{os.getenv('RENDER_EXTERNAL_URL', 'unknown')}/webhook"
+        "webhook_url": f"{os.getenv('RENDER_EXTERNAL_URL', 'unknown')}/webhook",
+        "users_count": len(users_data),
+        "movies_count": len(movie_codes),
+        "temp_video_data": list(temp_video_data.keys()),
+        "temp_ad_data": list(temp_ad_data.keys())
+    })
+
+@app.route('/test_keyboard')
+def test_keyboard():
+    """Test keyboard endpoint"""
+    test_keyboard = {
+        "inline_keyboard": [
+            [{"text": "✅ Test Button", "callback_data": "test_callback"}]
+        ]
+    }
+    return jsonify({
+        "keyboard": test_keyboard,
+        "keyboard_json": json.dumps(test_keyboard)
     })
 
 @app.route('/webhook', methods=['POST'])
@@ -287,14 +335,20 @@ def handle_movie_request(chat_id, code):
 
 def handle_regular_message(chat_id, user_id, text, message):
     """Handle regular messages (file uploads, etc.)"""
+    logger.info(f"🔍 handle_regular_message: user_id={user_id}, admin_id={ADMIN_ID}, text='{text[:20]}...'")
+    
     # Check if admin is uploading a movie
     if user_id == ADMIN_ID:
+        logger.info(f"🔧 Admin message detected")
+        
         # Check if waiting for movie title
         if chat_id in temp_video_data and temp_video_data[chat_id].get('waiting_for_title'):
+            logger.info(f"📝 Processing movie title: {text}")
             finalize_movie_save(chat_id, text)
             return
             
         if 'video' in message:
+            logger.info(f"🎬 Video detected: {message['video']['file_id']}")
             # Admin sent a video - ask for movie code
             video = message['video']
             file_id = video['file_id']
@@ -308,6 +362,8 @@ def handle_regular_message(chat_id, user_id, text, message):
                 'file_size': file_size
             }
             
+            logger.info(f"💾 Stored video data for chat {chat_id}")
+            
             keyboard = {
                 "inline_keyboard": [
                     [{"text": "❌ Bekor qilish", "callback_data": "cancel_upload"}]
@@ -318,6 +374,7 @@ def handle_regular_message(chat_id, user_id, text, message):
                 "🎬 Video qabul qilindi!\n\n📝 Endi kino kodini yuboring (masalan: #123):", 
                 keyboard)
         elif text.startswith('#') and chat_id in temp_video_data and not temp_video_data[chat_id].get('waiting_for_title'):
+            logger.info(f"📁 Processing movie code: {text}")
             # Admin sent movie code after video
             code = text.strip().lower()
             temp_video_data[chat_id]['code'] = code
@@ -326,10 +383,12 @@ def handle_regular_message(chat_id, user_id, text, message):
         elif 'photo' in message or (message.get('text') and len(message.get('text', '')) > 10):
             # Admin might be sending advertisement
             if temp_ad_data.get(chat_id, {}).get('waiting_for_ad'):
+                logger.info(f"📢 Processing advertisement content")
                 handle_advertisement_content(chat_id, message)
             else:
                 send_message(chat_id, "ℹ️ Admin komandasi tanilmadi. /admin ni bosing.")
         else:
+            logger.info(f"❓ Unknown admin message")
             send_message(chat_id, "ℹ️ Admin komandasi tanilmadi. /admin ni bosing.")
     else:
         send_message(chat_id, "🤔 Tushunmadim. Kino kodi yuboring (masalan: #123) yoki /start bosing.")
@@ -475,10 +534,13 @@ def send_photo(chat_id, photo_id, caption=""):
 
 def handle_callback_query(chat_id, user_id, callback_data, message_id):
     """Handle callback queries"""
-    if callback_data == "stats":
-        handle_stats(chat_id, user_id)
-    elif callback_data == "help":
-        help_text = """ℹ️ <b>Yordam</b>
+    logger.info(f"🔘 Processing callback: {callback_data} from user {user_id}")
+    
+    try:
+        if callback_data == "stats":
+            handle_stats(chat_id, user_id)
+        elif callback_data == "help":
+            help_text = """ℹ️ <b>Yordam</b>
 
 🔍 <b>Kino qidirish:</b>
 • Kino kodini yuboring: <code>#123</code>
@@ -488,25 +550,37 @@ def handle_callback_query(chat_id, user_id, callback_data, message_id):
 • /start - Botni qayta ishga tushirish
 • /stat - Statistika ko'rish
 • /admin - Admin panel (faqat admin uchun)"""
-        send_message(chat_id, help_text)
-    elif callback_data == "admin_stats" and user_id == ADMIN_ID:
-        handle_admin_stats(chat_id)
-    elif callback_data == "upload_movie" and user_id == ADMIN_ID:
-        send_message(chat_id, "🎬 Video faylni yuboring:")
-    elif callback_data == "send_ad" and user_id == ADMIN_ID:
-        handle_send_advertisement(chat_id)
-    elif callback_data == "users_list" and user_id == ADMIN_ID:
-        handle_users_list(chat_id)
-    elif callback_data == "cancel_upload" and user_id == ADMIN_ID:
-        if chat_id in temp_video_data:
-            del temp_video_data[chat_id]
-        send_message(chat_id, "❌ Kino yuklash bekor qilindi.")
-    elif callback_data == "confirm_broadcast" and user_id == ADMIN_ID:
-        handle_confirm_broadcast(chat_id)
-    elif callback_data == "cancel_broadcast" and user_id == ADMIN_ID:
-        if chat_id in temp_ad_data:
-            del temp_ad_data[chat_id]
-        send_message(chat_id, "❌ Reklama yuborish bekor qilindi.")
+            send_message(chat_id, help_text)
+        elif callback_data == "admin_stats" and user_id == ADMIN_ID:
+            handle_admin_stats(chat_id)
+        elif callback_data == "upload_movie" and user_id == ADMIN_ID:
+            logger.info(f"🎬 Admin clicked upload_movie")
+            send_message(chat_id, "🎬 Video faylni yuboring:")
+        elif callback_data == "send_ad" and user_id == ADMIN_ID:
+            handle_send_advertisement(chat_id)
+        elif callback_data == "users_list" and user_id == ADMIN_ID:
+            handle_users_list(chat_id)
+        elif callback_data == "cancel_upload" and user_id == ADMIN_ID:
+            if chat_id in temp_video_data:
+                del temp_video_data[chat_id]
+            send_message(chat_id, "❌ Kino yuklash bekor qilindi.")
+        elif callback_data == "confirm_broadcast" and user_id == ADMIN_ID:
+            handle_confirm_broadcast(chat_id)
+        elif callback_data == "cancel_broadcast" and user_id == ADMIN_ID:
+            if chat_id in temp_ad_data:
+                del temp_ad_data[chat_id]
+            send_message(chat_id, "❌ Reklama yuborish bekor qilindi.")
+        elif callback_data == "test_callback":
+            send_message(chat_id, "✅ Test callback ishlayapti!")
+        else:
+            logger.warning(f"⚠️ Unknown callback: {callback_data}")
+            # Send a response even for unknown callbacks
+            send_message(chat_id, f"❓ Noma'lum buyruq: {callback_data}")
+    except Exception as e:
+        logger.error(f"❌ Callback handling error: {e}")
+        import traceback
+        logger.error(f"❌ Callback traceback: {traceback.format_exc()}")
+        send_message(chat_id, "❌ Xatolik yuz berdi, qayta urinib ko'ring.")
 
 def handle_send_advertisement(chat_id):
     """Handle send advertisement"""
@@ -568,10 +642,6 @@ def handle_admin_stats(chat_id):
 
     send_message(chat_id, stats_text)
 
-def handle_send_advertisement(chat_id):
-    """Handle send advertisement"""
-    send_message(chat_id, "📢 Reklama matnini yoki rasmini yuboring:")
-
 def handle_users_list(chat_id):
     """Handle users list"""
     if not users_data:
@@ -628,6 +698,7 @@ def finalize_movie_save(chat_id, title):
         return
         
     # Save movie
+    import time
     movie_codes[code] = {
         'file_id': video_data['file_id'],
         'title': title,
@@ -682,10 +753,20 @@ def answer_callback_query(callback_query_id, text=""):
             "text": text
         }
         
-        requests.post(url, data=data, timeout=5)
+        logger.info(f"📞 Answering callback query: {callback_query_id}")
+        response = requests.post(url, data=data, timeout=5)
+        result = response.json()
+        
+        if result.get('ok'):
+            logger.info(f"✅ Callback query answered successfully")
+            return True
+        else:
+            logger.error(f"❌ Answer callback error: {result}")
+            return False
         
     except Exception as e:
         logger.error(f"❌ Answer callback error: {e}")
+        return False
 
 # Load data on startup
 load_data()
