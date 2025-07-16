@@ -459,7 +459,7 @@ def handle_movie_code(chat_id, user_id, code):
         send_message(chat_id, error_text, keyboard)
 
 def handle_video_upload(chat_id, user_id, message):
-    """Handle video upload from admin"""
+    """Handle video upload from admin - ENHANCED VERSION"""
     if user_id != ADMIN_ID:
         send_message(chat_id, "❌ Faqat admin video yuklashi mumkin!")
         return
@@ -469,6 +469,8 @@ def handle_video_upload(chat_id, user_id, message):
     duration = video.get('duration', 0)
     file_size = video.get('file_size', 0)
     
+    logger.info(f"🎬 Video upload: file_id={file_id}, duration={duration}, size={file_size}")
+    
     # Store upload session
     upload_sessions[chat_id] = {
         'file_id': file_id,
@@ -477,6 +479,8 @@ def handle_video_upload(chat_id, user_id, message):
         'step': 'waiting_for_code',
         'timestamp': int(time.time())
     }
+    
+    logger.info(f"🎬 Upload session created: {upload_sessions[chat_id]}")
     
     # Format info
     size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
@@ -489,7 +493,10 @@ def handle_video_upload(chat_id, user_id, message):
 ⏱ <b>Davomiyligi:</b> {f'{hours}:{minutes:02d}' if hours > 0 else f'{minutes} daqiqa'}
 
 📝 <b>Endi kino kodini yuboring:</b>
-• Masalan: <code>#123</code> yoki <code>456</code>"""
+• Faqat raqam: <code>292</code>
+• Yoki # bilan: <code>#292</code>
+
+💡 <b>Maslahat:</b> Kod faqat raqam bo'lishi kerak!"""
 
     keyboard = {
         'inline_keyboard': [
@@ -497,22 +504,28 @@ def handle_video_upload(chat_id, user_id, message):
         ]
     }
     
-    send_message(chat_id, info_text, keyboard)
+    result = send_message(chat_id, info_text, keyboard)
+    logger.info(f"🎬 Video upload prompt sent: {result}")
 
 def handle_text_message(chat_id, user_id, text):
-    """Handle text message"""
+    """Handle text message - ENHANCED VERSION"""
     # Check if admin is in upload session
     if user_id == ADMIN_ID and chat_id in upload_sessions:
         session = upload_sessions[chat_id]
         
+        logger.info(f"🔧 Admin in upload session: step='{session.get('step')}', text='{text}'")
+        
         if session['step'] == 'waiting_for_code':
+            logger.info(f"📝 Processing upload code: '{text}'")
             handle_upload_code(chat_id, text)
         elif session['step'] == 'waiting_for_title':
+            logger.info(f"📝 Processing upload title: '{text}'")
             handle_upload_title(chat_id, text)
         return
     
     # For regular users, try to process as movie code
     if text.strip() and (text.strip().startswith('#') or text.strip().isdigit()):
+        logger.info(f"🎭 Regular user movie code request: '{text}'")
         handle_movie_code(chat_id, user_id, text)
     else:
         # Unknown message
@@ -538,34 +551,50 @@ def handle_text_message(chat_id, user_id, text):
         send_message(chat_id, help_text, keyboard)
 
 def handle_upload_code(chat_id, code):
-    """Handle upload code step"""
-    code = code.strip()
+    """Handle upload code step - FIXED VERSION"""
+    original_code = code.strip()
     
-    # Normalize code
-    if code.isdigit():
-        code = f"#{code}"
+    logger.info(f"🎬 Upload code processing: '{original_code}'")
     
-    if not code.startswith('#'):
-        send_message(chat_id, "❌ Kod # bilan boshlanishi kerak! Masalan: #123")
+    # Normalize code - remove # if present, we'll store without #
+    if original_code.startswith('#'):
+        clean_code = original_code[1:]
+    elif original_code.isdigit():
+        clean_code = original_code
+    else:
+        send_message(chat_id, "❌ Kod faqat raqam bo'lishi kerak! Masalan: 123 yoki #123")
         return
     
-    # Check if exists
-    if code in movies_db:
+    # Validate that it's a number
+    if not clean_code.isdigit():
+        send_message(chat_id, "❌ Kod faqat raqam bo'lishi kerak! Masalan: 123")
+        return
+    
+    logger.info(f"🎬 Clean code for storage: '{clean_code}'")
+    logger.info(f"🎬 Current movies in database: {list(movies_db.keys())}")
+    
+    # Check if exists (check both formats)
+    code_exists = clean_code in movies_db or f"#{clean_code}" in movies_db
+    
+    if code_exists:
+        logger.info(f"⚠️ Code '{clean_code}' already exists")
+        # Use clean code for storage consistency
         keyboard = {
             'inline_keyboard': [
-                [{'text': '✅ Ha, almashtirish', 'callback_data': f'replace_movie_{code}'}],
+                [{'text': '✅ Ha, almashtirish', 'callback_data': f'replace_movie_{clean_code}'}],
                 [{'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'cancel_upload'}]
             ]
         }
-        send_message(chat_id, f"⚠️ <b>{code}</b> kodi allaqachon mavjud!\n\nAlmashtirishni xohlaysizmi?", keyboard)
+        send_message(chat_id, f"⚠️ <b>#{clean_code}</b> kodi allaqachon mavjud!\n\nAlmashtirishni xohlaysizmi?", keyboard)
     else:
-        # New code
-        upload_sessions[chat_id]['code'] = code
+        logger.info(f"✅ New code '{clean_code}' - proceeding to title")
+        # Store clean code (without #) for consistency
+        upload_sessions[chat_id]['code'] = clean_code
         upload_sessions[chat_id]['step'] = 'waiting_for_title'
-        send_message(chat_id, f"📝 <b>{code}</b> kodi uchun kino nomini yuboring:")
+        send_message(chat_id, f"📝 <b>#{clean_code}</b> kodi uchun kino nomini yuboring:")
 
 def handle_upload_title(chat_id, title):
-    """Handle upload title step"""
+    """Handle upload title step - ENHANCED VERSION"""
     title = title.strip()
     
     if not title:
@@ -574,9 +603,11 @@ def handle_upload_title(chat_id, title):
     
     # Complete upload
     session = upload_sessions[chat_id]
-    code = session['code']
+    code = session['code']  # This should be clean code without #
     
-    # Save movie
+    logger.info(f"🎬 Saving movie: code='{code}', title='{title}'")
+    
+    # Save movie with clean code (without #) for consistency
     movies_db[code] = {
         'file_id': session['file_id'],
         'title': title,
@@ -586,19 +617,20 @@ def handle_upload_title(chat_id, title):
         'upload_time': int(time.time())
     }
     
+    # Save to database
     save_database()
     
     # Clean up session
     del upload_sessions[chat_id]
     
-    # Success message
+    # Success message with details
     size_mb = session['file_size'] / (1024 * 1024)
     duration = session['duration']
     
     success_text = f"""✅ <b>Kino muvaffaqiyatli saqlandi!</b>
 
 🎬 <b>Nomi:</b> {title}
-📁 <b>Kod:</b> <code>{code}</code>
+📁 <b>Kod:</b> <code>#{code}</code>
 📦 <b>Hajmi:</b> {size_mb:.1f} MB"""
 
     if duration > 0:
@@ -612,7 +644,8 @@ def handle_upload_title(chat_id, title):
     success_text += f"\n\n🎭 <b>Ultimate Professional Kino Bot</b>"
     
     send_message(chat_id, success_text)
-    logger.info(f"✅ Movie saved: {code} - {title}")
+    logger.info(f"✅ Movie saved successfully: {code} - {title}")
+    logger.info(f"✅ Total movies in database: {len(movies_db)}")
 
 def handle_callback(callback_query):
     """Handle callback query"""
@@ -652,11 +685,21 @@ def handle_callback(callback_query):
                 send_message(chat_id, "❌ Hech narsa bekor qilinmadi.")
         elif data.startswith('replace_movie_'):
             if user_id == ADMIN_ID:
+                # Extract clean code (without #)
                 code = data.replace('replace_movie_', '')
+                logger.info(f"🔄 Replace movie callback for code: '{code}'")
+                
                 if chat_id in upload_sessions:
+                    # Store clean code for consistency
                     upload_sessions[chat_id]['code'] = code
                     upload_sessions[chat_id]['step'] = 'waiting_for_title'
-                    send_message(chat_id, f"📝 <b>{code}</b> uchun yangi kino nomini yuboring:")
+                    send_message(chat_id, f"📝 <b>#{code}</b> uchun yangi kino nomini yuboring:")
+                    logger.info(f"🔄 Set replace mode for code '{code}'")
+                else:
+                    logger.error(f"❌ No upload session found for replace operation")
+                    send_message(chat_id, "❌ Upload sessiyasi topilmadi!")
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
         else:
             send_message(chat_id, f"❓ Noma'lum buyruq: {data}")
             
