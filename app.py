@@ -158,6 +158,10 @@ def handle_start(chat_id, user_id):
         ]
     }
     
+    # Add admin button if user is admin
+    if user_id == ADMIN_ID:
+        keyboard['inline_keyboard'].append([{'text': '👑 Admin Panel', 'callback_data': 'admin_menu'}])
+    
     send_message(chat_id, start_text, keyboard)
 
 def handle_admin_menu(chat_id, user_id):
@@ -549,6 +553,11 @@ def handle_callback(callback_query):
             show_movies_list(chat_id, user_id)
         elif data == 'show_help':
             show_help(chat_id)
+        elif data == 'admin_menu':
+            if user_id == ADMIN_ID:
+                handle_admin_menu(chat_id, user_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
         elif data == 'admin_stats':
             if user_id == ADMIN_ID:
                 show_admin_stats(chat_id)
