@@ -121,7 +121,11 @@ def handle_message(message):
         if text == '/start':
             handle_start(chat_id, user_id)
         elif text == '/admin':
-            if user_id == ADMIN_ID:
+            # Convert to int for reliable comparison
+            user_id_int = int(user_id) if user_id else 0
+            admin_id = int(ADMIN_ID)
+            
+            if user_id_int == admin_id:
                 handle_admin_menu(chat_id, user_id)
             else:
                 send_message(chat_id, """❌ <b>Admin paneli</b>
@@ -148,9 +152,13 @@ def handle_message(message):
 
 def handle_start(chat_id, user_id):
     """Handle /start command"""
-    logger.info(f"🏁 Start command: user_id={user_id}, admin_id={ADMIN_ID}, is_admin={user_id == ADMIN_ID}")
+    # Convert to int for reliable comparison
+    user_id = int(user_id) if user_id else 0
+    admin_id = int(ADMIN_ID)
     
-    if user_id == ADMIN_ID:
+    logger.info(f"🏁 Start command: user_id={user_id}, admin_id={admin_id}, is_admin={user_id == admin_id}")
+    
+    if user_id == admin_id:
         # Admin version with statistics
         start_text = f"""🎭 <b>Ultimate Professional Kino Bot V3.0</b>
 
@@ -211,7 +219,11 @@ def handle_start(chat_id, user_id):
 
 def handle_admin_menu(chat_id, user_id):
     """Handle admin menu"""
-    if user_id != ADMIN_ID:
+    # Convert to int for reliable comparison
+    user_id = int(user_id) if user_id else 0
+    admin_id = int(ADMIN_ID)
+    
+    if user_id != admin_id:
         send_message(chat_id, "❌ Admin huquqi kerak!")
         return
         
@@ -239,7 +251,11 @@ def handle_admin_menu(chat_id, user_id):
 
 def handle_stats(chat_id, user_id):
     """Handle statistics - Admin only"""
-    if user_id != ADMIN_ID:
+    # Convert to int for reliable comparison
+    user_id = int(user_id) if user_id else 0
+    admin_id = int(ADMIN_ID)
+    
+    if user_id != admin_id:
         send_message(chat_id, """❌ <b>Kirish rad etildi!</b>
 
 🔐 Bu ma'lumot faqat admin uchun mo'ljallangan.
@@ -355,7 +371,11 @@ def handle_movie_code(chat_id, user_id, code):
         available_codes = list(movies_db.keys())[:5]
         codes_text = ", ".join(available_codes) if available_codes else "Hozircha mavjud emas"
         
-        if user_id == ADMIN_ID:
+        # Convert to int for reliable comparison
+        user_id_int = int(user_id) if user_id else 0
+        admin_id = int(ADMIN_ID)
+        
+        if user_id_int == admin_id:
             # Admin version with statistics
             error_text = f"""❌ <b>{original_code}</b> kod topilmadi!
 
@@ -476,9 +496,13 @@ def handle_text_message(chat_id, user_id, text):
         handle_movie_code(chat_id, user_id, text)
     else:
         # Unknown message - different response for admin vs regular users
-        logger.info(f"🔍 Checking user {user_id} vs admin {ADMIN_ID}: {user_id == ADMIN_ID}")
+        # Convert to int for reliable comparison
+        user_id = int(user_id) if user_id else 0
+        admin_id = int(ADMIN_ID)
         
-        if user_id == ADMIN_ID:
+        logger.info(f"🔍 Checking user {user_id} vs admin {admin_id}: {user_id == admin_id}")
+        
+        if user_id == admin_id:
             # Admin version with all options
             help_text = f"""🤔 <b>Tushunmadim.</b>
 
