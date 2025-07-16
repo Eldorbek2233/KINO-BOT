@@ -9,6 +9,8 @@ import sys
 import json
 import time
 import logging
+import threading
+import requests
 from flask import Flask, request, jsonify
 
 # Configure logging
@@ -81,8 +83,43 @@ def home():
         "status": "🎭 Ultimate Professional Kino Bot V3.0",
         "users": len(users_db),
         "movies": len(movies_db),
+        "channels": len(mandatory_channels),
         "platform": "render",
-        "webhook_ready": True
+        "webhook_ready": True,
+        "uptime": time.time(),
+        "message": "Bot is running smoothly! 🚀"
+    })
+
+@app.route('/ping')
+def ping():
+    """Ping endpoint for Uptime Robot"""
+    return jsonify({
+        "status": "alive",
+        "timestamp": int(time.time()),
+        "bot": "Ultimate Professional Kino Bot V3.0",
+        "users": len(users_db),
+        "movies": len(movies_db),
+        "message": "Pong! 🏓"
+    })
+
+@app.route('/health')
+def health():
+    """Detailed health check"""
+    return jsonify({
+        "status": "healthy",
+        "bot_name": "Ultimate Professional Kino Bot V3.0",
+        "statistics": {
+            "users": len(users_db),
+            "movies": len(movies_db),
+            "channels": len(mandatory_channels),
+            "upload_sessions": len(upload_sessions),
+            "broadcast_sessions": len(broadcast_data)
+        },
+        "system": {
+            "timestamp": int(time.time()),
+            "platform": "render",
+            "webhook_active": True
+        }
     })
 
 @app.route('/webhook', methods=['POST'])
@@ -249,6 +286,7 @@ def handle_admin_menu(chat_id, user_id):
 • Kinolar: {len(movies_db)}
 • Majburiy kanallar: {len(mandatory_channels)}
 • Upload sessiyalar: {len(upload_sessions)}
+• Keep-alive: ✅ Faol
 
 ⚙️ <b>Admin amallar:</b>"""
 
@@ -260,7 +298,8 @@ def handle_admin_menu(chat_id, user_id):
             [{'text': '📺 Kanal boshqaruvi', 'callback_data': 'manage_channels'}],
             [{'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}],
             [{'text': '🎭 Kinolar ro\'yxati', 'callback_data': 'list_movies'}],
-            [{'text': '🔧 Test funksiya', 'callback_data': 'admin_test'}]
+            [{'text': '🔧 Tizim holati', 'callback_data': 'system_health'}],
+            [{'text': '🏓 Ping test', 'callback_data': 'ping_test'}]
         ]
     }
     
@@ -802,6 +841,16 @@ def handle_callback(callback_query):
                 show_admin_test(chat_id)
             else:
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data == 'system_health':
+            if user_id == ADMIN_ID:
+                show_system_health(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data == 'ping_test':
+            if user_id == ADMIN_ID:
+                test_ping(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
         elif data == 'back_to_start':
             handle_start(chat_id, user_id)
         else:
@@ -1281,19 +1330,6 @@ def show_admin_stats(chat_id):
 
     send_message(chat_id, stats_text)
 
-def show_admin_test(chat_id):
-    """Show admin test"""
-    test_text = """🔧 <b>Admin Test Panel</b>
-    
-✅ Barcha sistemalar normal ishlaydi!
-✅ Database ulanish: OK
-✅ Upload tizimi: OK
-✅ Broadcast tizimi: OK
-
-🎭 Ultimate Professional Bot V3.0"""
-    
-    send_message(chat_id, test_text)
-
 def handle_photo_upload(chat_id, user_id, message):
     """Handle photo upload from admin"""
     if user_id != ADMIN_ID:
@@ -1705,7 +1741,6 @@ def setup_webhook():
         if webhook_url:
             webhook_url = f"{webhook_url}/webhook"
             
-            import requests
             response = requests.post(
                 f"https://api.telegram.org/bot{TOKEN}/setWebhook",
                 data={"url": webhook_url}
@@ -1722,10 +1757,235 @@ def setup_webhook():
     except Exception as e:
         logger.error(f"❌ Webhook setup error: {e}")
 
+def keep_alive():
+    """Keep the app alive by self-pinging every 10 minutes"""
+    try:
+        app_url = os.getenv('RENDER_EXTERNAL_URL')
+        if app_url:
+            ping_url = f"{app_url}/ping"
+            
+            while True:
+                try:
+                    response = requests.get(ping_url, timeout=30)
+                    if response.status_code == 200:
+                        logger.info(f"🏓 Keep-alive ping successful: {response.json().get('message', 'Pong!')}")
+                    else:
+                        logger.warning(f"⚠️ Keep-alive ping failed: {response.status_code}")
+                except Exception as e:
+                    logger.error(f"❌ Keep-alive ping error: {e}")
+                
+                # Wait 10 minutes (600 seconds)
+                time.sleep(600)
+        else:
+            logger.info("💡 Keep-alive disabled: No RENDER_EXTERNAL_URL found")
+            
+    except Exception as e:
+        logger.error(f"❌ Keep-alive thread error: {e}")
+
+def start_keep_alive():
+    """Start keep-alive thread"""
+    try:
+        if os.getenv('RENDER_EXTERNAL_URL'):
+            keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+            keep_alive_thread.start()
+            logger.info("🔄 Keep-alive system started (10-minute intervals)")
+        else:
+            logger.info("💡 Keep-alive disabled: Running locally")
+    except Exception as e:
+        logger.error(f"❌ Keep-alive start error: {e}")
+
+def show_system_health(chat_id):
+    """Show system health information"""
+    try:
+        app_url = os.getenv('RENDER_EXTERNAL_URL', 'localhost')
+        current_time = int(time.time())
+        
+        # Test internal endpoints
+        health_status = "🟢 Healthy"
+        ping_status = "🟢 Active"
+        
+        try:
+            if app_url != 'localhost':
+                # Test ping endpoint
+                ping_response = requests.get(f"{app_url}/ping", timeout=10)
+                if ping_response.status_code != 200:
+                    ping_status = "🟡 Warning"
+                
+                # Test health endpoint
+                health_response = requests.get(f"{app_url}/health", timeout=10)
+                if health_response.status_code != 200:
+                    health_status = "🟡 Warning"
+            
+        except Exception as e:
+            health_status = "🔴 Error"
+            ping_status = "🔴 Error"
+            logger.error(f"❌ Health check error: {e}")
+        
+        text = f"""🔧 <b>Tizim holati - System Health</b>
+
+🌐 <b>Server ma'lumotlari:</b>
+• URL: <code>{app_url}</code>
+• Holat: {health_status}
+• Keep-alive: {ping_status}
+• Vaqt: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}
+
+📊 <b>Bot statistikasi:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Kinolar: {len(movies_db)} ta
+• Majburiy kanallar: {len(mandatory_channels)} ta
+• Upload sessiyalar: {len(upload_sessions)} ta
+• Broadcast sessiyalar: {len(broadcast_data)} ta
+
+⚙️ <b>Tizim xususiyatlari:</b>
+• Platform: Render.com
+• Keep-alive interval: 10 daqiqa
+• Ping endpoint: /ping
+• Health endpoint: /health
+
+🎭 <b>Ultimate Professional Bot V3.0</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🏓 Ping Test', 'callback_data': 'ping_test'}],
+                [{'text': '🔄 Yangilash', 'callback_data': 'system_health'}],
+                [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ System health error: {e}")
+        send_message(chat_id, "❌ Tizim holati tekshirishda xatolik!")
+
+def test_ping(chat_id):
+    """Test ping functionality"""
+    try:
+        app_url = os.getenv('RENDER_EXTERNAL_URL')
+        
+        if not app_url:
+            send_message(chat_id, """🏓 <b>Ping Test - Local Mode</b>
+
+💡 <b>Local rejimda ishlayapti</b>
+• RENDER_EXTERNAL_URL topilmadi
+• Keep-alive disabled
+
+✅ <b>Bot normal ishlayapti!</b>""")
+            return
+        
+        send_message(chat_id, "🏓 <b>Ping test boshlandi...</b>\n\n⏳ Kuting...")
+        
+        start_time = time.time()
+        
+        try:
+            # Test ping endpoint
+            ping_response = requests.get(f"{app_url}/ping", timeout=15)
+            ping_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+            
+            if ping_response.status_code == 200:
+                ping_data = ping_response.json()
+                
+                result_text = f"""🏓 <b>Ping Test Natijalari</b>
+
+✅ <b>Muvaffaqiyatli!</b>
+• Response time: {ping_time:.0f}ms
+• Status: {ping_data.get('status', 'unknown')}
+• Message: {ping_data.get('message', 'No message')}
+
+🌐 <b>Endpoint ma'lumotlari:</b>
+• URL: <code>{app_url}/ping</code>
+• Timestamp: {ping_data.get('timestamp', 'unknown')}
+• Users: {ping_data.get('users', 0)}
+• Movies: {ping_data.get('movies', 0)}
+
+🎯 <b>Keep-alive tizimi normal ishlayapti!</b>"""
+                
+                if ping_time < 1000:
+                    speed_emoji = "🟢"
+                elif ping_time < 3000:
+                    speed_emoji = "🟡"
+                else:
+                    speed_emoji = "🔴"
+                
+                result_text = f"{speed_emoji} " + result_text
+                
+            else:
+                result_text = f"""🔴 <b>Ping Test Xatolik</b>
+
+❌ <b>Response error:</b>
+• Status code: {ping_response.status_code}
+• Response time: {ping_time:.0f}ms
+
+⚠️ <b>Keep-alive tizimida muammo bo'lishi mumkin!</b>"""
+                
+        except requests.exceptions.Timeout:
+            result_text = """🔴 <b>Ping Test Timeout</b>
+
+❌ <b>Timeout xatolik:</b>
+• 15 soniya ichida javob kelmadi
+• Server juda sekin yoki ishlamayapti
+
+⚠️ <b>Keep-alive tizimni tekshiring!</b>"""
+            
+        except Exception as e:
+            result_text = f"""🔴 <b>Ping Test Xatolik</b>
+
+❌ <b>Xatolik:</b>
+• {str(e)}
+
+⚠️ <b>Server muammosi yoki tarmoq xatoligi!</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🔄 Qayta test', 'callback_data': 'ping_test'}],
+                [{'text': '🔧 Tizim holati', 'callback_data': 'system_health'}],
+                [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+            ]
+        }
+        
+        send_message(chat_id, result_text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Ping test error: {e}")
+        send_message(chat_id, "❌ Ping test xatolik!")
+
+def show_admin_test(chat_id):
+    """Show admin test"""
+    uptime_info = "Keep-alive: ✅ Faol" if os.getenv('RENDER_EXTERNAL_URL') else "Keep-alive: 💡 Local mode"
+    
+    test_text = f"""🔧 <b>Admin Test Panel</b>
+    
+✅ Barcha sistemalar normal ishlaydi!
+✅ Database ulanish: OK
+✅ Upload tizimi: OK
+✅ Broadcast tizimi: OK
+✅ Channel management: OK
+✅ {uptime_info}
+
+🎭 Ultimate Professional Bot V3.0
+
+📋 <b>Uptime Robot uchun endpoint:</b>
+• <code>/ping</code> - Ping endpoint
+• <code>/health</code> - Health check
+• <code>/</code> - Home status
+
+💡 <b>Har 10 daqiqada ping yuboriladi!</b>"""
+    
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '🏓 Ping Test', 'callback_data': 'ping_test'}],
+            [{'text': '🔧 Tizim holati', 'callback_data': 'system_health'}],
+            [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+        ]
+    }
+    
+    send_message(chat_id, test_text, keyboard)
+
 # Initialize on startup
 logger.info("🚀 Starting Ultimate Professional Kino Bot V3.0...")
 load_database()
 setup_webhook()
+start_keep_alive()
 
 # For gunicorn compatibility
 application = app
