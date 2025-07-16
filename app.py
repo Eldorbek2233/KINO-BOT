@@ -217,7 +217,7 @@ def status():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    """Main webhook handler"""
+    """Main webhook handler - ULTIMATE VERSION"""
     try:
         # Load fresh data
         load_database()
@@ -225,29 +225,49 @@ def webhook():
         # Get update
         update = request.get_json()
         if not update:
-            logger.warning("Empty update received")
+            logger.warning("❌ Empty update received")
             return "NO_DATA", 400
         
-        logger.info(f"📨 Update received: {update}")
+        logger.info(f"📨 Webhook update received")
+        logger.info(f"📨 Update keys: {list(update.keys())}")
         
         # Handle message
         if 'message' in update:
-            handle_message(update['message'])
+            logger.info("📨 Processing message...")
+            message = update['message']
+            logger.info(f"📨 Message type: text={bool(message.get('text'))}, video={bool(message.get('video'))}, photo={bool(message.get('photo'))}")
+            handle_message(message)
         
         # Handle callback
         elif 'callback_query' in update:
+            logger.info("📨 Processing callback...")
             handle_callback(update['callback_query'])
         
+        # Handle other update types
+        else:
+            logger.warning(f"❓ Unknown update type: {list(update.keys())}")
+            return "UNKNOWN_UPDATE", 200
+        
+        logger.info("✅ Webhook processed successfully")
         return "OK", 200
         
     except Exception as e:
         logger.error(f"❌ Webhook error: {e}")
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        
+        # Try to get chat_id for error reporting
+        try:
+            if 'message' in request.get_json(force=True):
+                chat_id = request.get_json()['message']['chat']['id']
+                send_message(chat_id, "❌ Bot xatoligi! Admin bilan bog'laning.")
+        except:
+            pass
+            
         return f"ERROR: {str(e)}", 500
 
 def handle_message(message):
-    """Handle incoming message - COMPLETELY FIXED"""
+    """Handle incoming message - ULTIMATE FIXED VERSION"""
     try:
         # Extract message data
         chat_id = message.get('chat', {}).get('id')
@@ -257,12 +277,66 @@ def handle_message(message):
         text = message.get('text', '')
         
         logger.info(f"💬 Message from {user_id} ({first_name}): '{text}'")
-        logger.info(f"💬 Message contains: video={bool(message.get('video'))}, photo={bool(message.get('photo'))}")
+        logger.info(f"💬 Message type check:")
+        logger.info(f"   - Text: '{text}'")
+        logger.info(f"   - Video: {bool(message.get('video'))}")
+        logger.info(f"   - Photo: {bool(message.get('photo'))}")
+        logger.info(f"   - Document: {bool(message.get('document'))}")
         
         # Save user
         save_user(user_id, username, first_name)
         
-        # Handle commands first
+        # Check if admin is in upload session FIRST
+        if user_id == ADMIN_ID and chat_id in upload_sessions:
+            session = upload_sessions[chat_id]
+            logger.info(f"🔧 Admin in upload session: step='{session.get('step')}'")
+            
+            if session['step'] == 'waiting_for_code':
+                if text:  # Text message for code
+                    logger.info(f"📝 Processing upload code: '{text}'")
+                    handle_upload_code(chat_id, text)
+                    return
+                else:
+                    send_message(chat_id, "❌ Kod kiriting! Masalan: 123 yoki #123")
+                    return
+                    
+            elif session['step'] == 'waiting_for_title':
+                if text:  # Text message for title
+                    logger.info(f"📝 Processing upload title: '{text}'")
+                    handle_upload_title(chat_id, text)
+                    return
+                else:
+                    send_message(chat_id, "❌ Kino nomini kiriting!")
+                    return
+        
+        # Handle video uploads - check this BEFORE text commands
+        if message.get('video'):
+            logger.info(f"🎬 Video detected from user {user_id}")
+            if user_id == ADMIN_ID:
+                handle_video_upload(chat_id, user_id, message)
+            else:
+                send_message(chat_id, "❌ Faqat admin video yuklashi mumkin!")
+            return
+            
+        # Handle photo uploads
+        if message.get('photo'):
+            logger.info(f"📸 Photo detected from user {user_id}")
+            if user_id == ADMIN_ID:
+                handle_photo_upload(chat_id, user_id, message)
+            else:
+                send_message(chat_id, "📸 Rasm qabul qilindi, lekin faqat admin media yuklashi mumkin.")
+            return
+            
+        # Handle document uploads  
+        if message.get('document'):
+            logger.info(f"📄 Document detected from user {user_id}")
+            if user_id == ADMIN_ID:
+                send_message(chat_id, "📄 Hujjat qabul qilindi, lekin faqat video yuklash qo'llab-quvvatlanadi.")
+            else:
+                send_message(chat_id, "❌ Faqat admin fayl yuklashi mumkin!")
+            return
+        
+        # Handle text commands
         if text == '/start':
             handle_start(chat_id, user_id, first_name)
         elif text == '/admin':
@@ -271,20 +345,13 @@ def handle_message(message):
             handle_stats(chat_id, user_id)
         elif text.startswith('#') or text.isdigit():
             handle_movie_code(chat_id, user_id, text)
-        # Handle video uploads (must be after commands)
-        elif message.get('video'):
-            logger.info(f"🎬 Video detected from user {user_id}")
-            handle_video_upload(chat_id, user_id, message)
-        # Handle photo uploads
-        elif message.get('photo'):
-            logger.info(f"📸 Photo detected from user {user_id}")
-            if user_id == ADMIN_ID:
-                handle_photo_upload(chat_id, user_id, message)
-            else:
-                send_message(chat_id, "📸 Rasm qabul qilindi, lekin faqat admin media yuklashi mumkin.")
-        # Handle text messages
-        else:
+        elif text:
+            # Regular text message
             handle_text_message(chat_id, user_id, text)
+        else:
+            # Empty message or unsupported type
+            logger.warning(f"⚠️ Unsupported message type from {user_id}")
+            send_message(chat_id, "❓ Noma'lum xabar turi. /start ni bosing.")
             
     except Exception as e:
         logger.error(f"❌ Message handling error: {e}")
@@ -319,31 +386,56 @@ def handle_start(chat_id, user_id, first_name):
     send_message(chat_id, welcome_text, keyboard)
 
 def handle_admin(chat_id, user_id):
-    """Handle admin panel"""
+    """Handle admin panel - ENHANCED VERSION"""
     if user_id != ADMIN_ID:
         send_message(chat_id, "❌ Siz admin emassiz!")
+        logger.warning(f"❌ Non-admin {user_id} tried to access admin panel")
         return
     
-    admin_text = f"""🔧 <b>Ultimate Admin Panel</b>
+    # Get current statistics
+    total_users = len(users_db)
+    total_movies = len(movies_db)
+    active_sessions = len(upload_sessions)
+    
+    # Calculate active users (last 24 hours)
+    current_time = int(time.time())
+    day_ago = current_time - 86400
+    active_today = sum(1 for user in users_db.values() if user.get('last_seen', 0) > day_ago)
+    
+    admin_text = f"""🔧 <b>Ultimate Admin Panel v3.0</b>
 
-📊 <b>Statistika:</b>
-• Foydalanuvchilar: {len(users_db)}
-• Kinolar: {len(movies_db)}
-• Upload sessiyalar: {len(upload_sessions)}
+📊 <b>Bot Statistikasi:</b>
+• Foydalanuvchilar: {total_users} (bugun: {active_today})
+• Kinolar: {total_movies}
+• Faol sessiyalar: {active_sessions}
 
-⚡️ <b>Tezkor amallar:</b>"""
+⚡️ <b>Tezkor amallar:</b>
+Quyidagi tugmalardan birini tanlang"""
 
     keyboard = {
         'inline_keyboard': [
-            [{'text': '📊 Batafsil statistika', 'callback_data': 'admin_stats'}],
-            [{'text': '🎬 Kino yuklash', 'callback_data': 'upload_movie'}],
-            [{'text': '📢 Reklama yuborish', 'callback_data': 'broadcast_ad'}],
-            [{'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}],
-            [{'text': '🗂 Kinolar ro\'yxati', 'callback_data': 'list_movies'}]
+            [
+                {'text': '📊 Batafsil statistika', 'callback_data': 'admin_stats'},
+                {'text': '🎬 Kino yuklash', 'callback_data': 'upload_movie'}
+            ],
+            [
+                {'text': '📢 Reklama yuborish', 'callback_data': 'broadcast_ad'},
+                {'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}
+            ],
+            [
+                {'text': '🗂 Kinolar ro\'yxati', 'callback_data': 'list_movies'},
+                {'text': '🔧 Test funksiyalar', 'callback_data': 'admin_test'}
+            ]
         ]
     }
     
-    send_message(chat_id, admin_text, keyboard)
+    result = send_message(chat_id, admin_text, keyboard)
+    
+    if result:
+        logger.info(f"✅ Admin panel shown to {user_id}")
+    else:
+        logger.error(f"❌ Failed to show admin panel to {user_id}")
+        send_message(chat_id, "❌ Admin panel yuklashda xatolik!")
 
 def handle_stats(chat_id, user_id):
     """Handle statistics"""
@@ -482,53 +574,96 @@ def handle_photo_upload(chat_id, user_id, message):
     logger.info(f"📸 Photo upload from admin: {user_id}")
 
 def handle_video_upload(chat_id, user_id, message):
-    """Handle video upload from admin - ENHANCED VERSION"""
+    """Handle video upload from admin - ULTIMATE ENHANCED VERSION"""
     if user_id != ADMIN_ID:
         send_message(chat_id, "❌ Faqat admin video yuklashi mumkin!")
+        logger.warning(f"❌ Non-admin {user_id} tried to upload video")
         return
     
-    video = message['video']
-    file_id = video['file_id']
-    duration = video.get('duration', 0)
-    file_size = video.get('file_size', 0)
-    
-    logger.info(f"🎬 Video upload: file_id={file_id}, duration={duration}, size={file_size}")
-    
-    # Store upload session
-    upload_sessions[chat_id] = {
-        'file_id': file_id,
-        'duration': duration,
-        'file_size': file_size,
-        'step': 'waiting_for_code',
-        'timestamp': int(time.time())
-    }
-    
-    logger.info(f"🎬 Upload session created: {upload_sessions[chat_id]}")
-    
-    # Format info
-    size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
-    hours = duration // 3600
-    minutes = (duration % 3600) // 60
-    
-    info_text = f"""🎬 <b>Video qabul qilindi!</b>
+    try:
+        video = message['video']
+        file_id = video['file_id']
+        duration = video.get('duration', 0)
+        file_size = video.get('file_size', 0)
+        
+        logger.info(f"🎬 Video upload details:")
+        logger.info(f"   - File ID: {file_id}")
+        logger.info(f"   - Duration: {duration}s")
+        logger.info(f"   - Size: {file_size} bytes")
+        
+        # Clear any existing session first
+        if chat_id in upload_sessions:
+            logger.info(f"🗑 Clearing existing upload session for {chat_id}")
+            del upload_sessions[chat_id]
+        
+        # Create new upload session
+        upload_sessions[chat_id] = {
+            'file_id': file_id,
+            'duration': duration,
+            'file_size': file_size,
+            'step': 'waiting_for_code',
+            'timestamp': int(time.time()),
+            'user_id': user_id
+        }
+        
+        logger.info(f"✅ Upload session created: {upload_sessions[chat_id]}")
+        
+        # Format video info
+        size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
+        
+        if duration > 0:
+            hours = duration // 3600
+            minutes = (duration % 3600) // 60
+            duration_text = f'{hours}:{minutes:02d}' if hours > 0 else f'{minutes} daqiqa'
+        else:
+            duration_text = "Noma'lum"
+        
+        info_text = f"""🎬 <b>Video muvaffaqiyatli qabul qilindi!</b>
 
-📦 <b>Hajmi:</b> {size_mb:.1f} MB
-⏱ <b>Davomiyligi:</b> {f'{hours}:{minutes:02d}' if hours > 0 else f'{minutes} daqiqa'}
+📦 <b>Fayl ma'lumotlari:</b>
+• Hajmi: {size_mb:.1f} MB
+• Davomiyligi: {duration_text}
+• Fayl ID: <code>{file_id[:20]}...</code>
 
-📝 <b>Endi kino kodini yuboring:</b>
-• Faqat raqam: <code>292</code>
-• Yoki # bilan: <code>#292</code>
+📝 <b>Keyingi qadam: Kino kodini kiriting</b>
 
-💡 <b>Maslahat:</b> Kod faqat raqam bo'lishi kerak!"""
+💡 <b>Kod formatlari:</b>
+• Raqam: <code>292</code>
+• # bilan: <code>#292</code>
 
-    keyboard = {
-        'inline_keyboard': [
-            [{'text': '❌ Bekor qilish', 'callback_data': 'cancel_upload'}]
-        ]
-    }
-    
-    result = send_message(chat_id, info_text, keyboard)
-    logger.info(f"🎬 Video upload prompt sent: {result}")
+⚠️ <b>Eslatma:</b> Kod faqat raqamlardan iborat bo'lishi kerak!"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '❌ Upload ni bekor qilish', 'callback_data': 'cancel_upload'}]
+            ]
+        }
+        
+        result = send_message(chat_id, info_text, keyboard)
+        
+        if result:
+            logger.info(f"✅ Video upload prompt sent successfully to {chat_id}")
+        else:
+            logger.error(f"❌ Failed to send upload prompt to {chat_id}")
+            # Clean up session if message failed
+            if chat_id in upload_sessions:
+                del upload_sessions[chat_id]
+                
+    except Exception as e:
+        logger.error(f"❌ Video upload error: {e}")
+        import traceback
+        logger.error(f"❌ Video upload traceback: {traceback.format_exc()}")
+        
+        # Clean up session on error
+        if chat_id in upload_sessions:
+            del upload_sessions[chat_id]
+            
+        send_message(chat_id, "❌ Video yuklashda xatolik yuz berdi! Qayta urinib ko'ring.")
+        
+        # Provide debug info to admin
+        if user_id == ADMIN_ID:
+            debug_text = f"🔧 Debug ma'lumot:\n• Video mavjud: {bool(message.get('video'))}\n• Xatolik: {str(e)}"
+            send_message(chat_id, debug_text)
 
 def handle_text_message(chat_id, user_id, text):
     """Handle text message - ENHANCED VERSION"""
@@ -574,47 +709,100 @@ def handle_text_message(chat_id, user_id, text):
         send_message(chat_id, help_text, keyboard)
 
 def handle_upload_code(chat_id, code):
-    """Handle upload code step - FIXED VERSION"""
-    original_code = code.strip()
-    
-    logger.info(f"🎬 Upload code processing: '{original_code}'")
-    
-    # Normalize code - remove # if present, we'll store without #
-    if original_code.startswith('#'):
-        clean_code = original_code[1:]
-    elif original_code.isdigit():
-        clean_code = original_code
-    else:
-        send_message(chat_id, "❌ Kod faqat raqam bo'lishi kerak! Masalan: 123 yoki #123")
-        return
-    
-    # Validate that it's a number
-    if not clean_code.isdigit():
-        send_message(chat_id, "❌ Kod faqat raqam bo'lishi kerak! Masalan: 123")
-        return
-    
-    logger.info(f"🎬 Clean code for storage: '{clean_code}'")
-    logger.info(f"🎬 Current movies in database: {list(movies_db.keys())}")
-    
-    # Check if exists (check both formats)
-    code_exists = clean_code in movies_db or f"#{clean_code}" in movies_db
-    
-    if code_exists:
-        logger.info(f"⚠️ Code '{clean_code}' already exists")
-        # Use clean code for storage consistency
-        keyboard = {
-            'inline_keyboard': [
-                [{'text': '✅ Ha, almashtirish', 'callback_data': f'replace_movie_{clean_code}'}],
-                [{'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'cancel_upload'}]
-            ]
-        }
-        send_message(chat_id, f"⚠️ <b>#{clean_code}</b> kodi allaqachon mavjud!\n\nAlmashtirishni xohlaysizmi?", keyboard)
-    else:
-        logger.info(f"✅ New code '{clean_code}' - proceeding to title")
-        # Store clean code (without #) for consistency
-        upload_sessions[chat_id]['code'] = clean_code
-        upload_sessions[chat_id]['step'] = 'waiting_for_title'
-        send_message(chat_id, f"📝 <b>#{clean_code}</b> kodi uchun kino nomini yuboring:")
+    """Handle upload code step - ULTIMATE FIXED VERSION"""
+    try:
+        original_code = code.strip()
+        
+        logger.info(f"🎬 Upload code processing:")
+        logger.info(f"   - Original input: '{original_code}'")
+        logger.info(f"   - Session exists: {chat_id in upload_sessions}")
+        
+        if chat_id not in upload_sessions:
+            send_message(chat_id, "❌ Upload sessiyasi topilmadi! Avval video yuboring.")
+            logger.error(f"❌ No upload session for chat {chat_id}")
+            return
+        
+        # Validate input
+        if not original_code:
+            send_message(chat_id, "❌ Kod bo'sh bo'lishi mumkin emas!")
+            return
+        
+        # Normalize code - remove # if present, store clean number
+        if original_code.startswith('#'):
+            clean_code = original_code[1:]
+        elif original_code.isdigit():
+            clean_code = original_code
+        else:
+            send_message(chat_id, f"❌ Kod faqat raqam bo'lishi kerak!\n\n✅ To'g'ri: <code>123</code> yoki <code>#123</code>\n❌ Noto'g'ri: <code>{original_code}</code>")
+            return
+        
+        # Validate that it's a pure number
+        if not clean_code.isdigit():
+            send_message(chat_id, f"❌ Kod faqat raqamlardan iborat bo'lishi kerak!\n\n✅ To'g'ri: <code>123</code>\n❌ Noto'g'ri: <code>{clean_code}</code>")
+            return
+        
+        logger.info(f"✅ Clean code for storage: '{clean_code}'")
+        logger.info(f"🔍 Checking existing codes: {list(movies_db.keys())}")
+        
+        # Check if code already exists (check multiple formats for compatibility)
+        code_exists = False
+        existing_formats = [clean_code, f"#{clean_code}"]
+        
+        for format_code in existing_formats:
+            if format_code in movies_db:
+                code_exists = True
+                logger.info(f"⚠️ Code exists in format: '{format_code}'")
+                break
+        
+        if code_exists:
+            logger.info(f"⚠️ Code '{clean_code}' already exists - asking for confirmation")
+            
+            # Show existing movie info
+            existing_movie = movies_db.get(clean_code) or movies_db.get(f"#{clean_code}")
+            if isinstance(existing_movie, dict):
+                existing_title = existing_movie.get('title', 'Noma\'lum')
+            else:
+                existing_title = f"Kino #{clean_code}"
+            
+            confirm_text = f"""⚠️ <b>#{clean_code}</b> kodi allaqachon mavjud!
+
+🎬 <b>Mavjud kino:</b> {existing_title}
+
+🔄 <b>Almashtirishni xohlaysizmi?</b>
+Eski kino o'chiriladi va yangi kino saqlanadi."""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '✅ Ha, almashtirish', 'callback_data': f'replace_movie_{clean_code}'}],
+                    [{'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'cancel_upload'}]
+                ]
+            }
+            send_message(chat_id, confirm_text, keyboard)
+        else:
+            logger.info(f"✅ New code '{clean_code}' - proceeding to title step")
+            # Store clean code and proceed to title
+            upload_sessions[chat_id]['code'] = clean_code
+            upload_sessions[chat_id]['step'] = 'waiting_for_title'
+            
+            title_text = f"""✅ <b>#{clean_code}</b> kodi qabul qilindi!
+
+📝 <b>Endi kino nomini kiriting:</b>
+
+💡 <b>Maslahat:</b> 
+• Aniq va qisqa nom kiriting
+• Masalan: "Terminator 2"
+
+🎬 <b>Kino ma'lumotlari:</b>
+• Kod: <code>#{clean_code}</code>
+• Hajmi: {upload_sessions[chat_id]['file_size'] / (1024*1024):.1f} MB"""
+
+            send_message(chat_id, title_text)
+            
+    except Exception as e:
+        logger.error(f"❌ Upload code error: {e}")
+        import traceback
+        logger.error(f"❌ Upload code traceback: {traceback.format_exc()}")
+        send_message(chat_id, "❌ Kod qayta ishlashda xatolik! Qayta urinib ko'ring.")
 
 def handle_upload_title(chat_id, title):
     """Handle upload title step - ENHANCED VERSION"""
