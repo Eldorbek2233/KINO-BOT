@@ -285,7 +285,21 @@ def debug():
         "status": "professional"
     })
 
-@app.route('/test')
+@app.route('/test_movie')
+def test_movie():
+    """Test movie functionality"""
+    load_data()
+    return jsonify({
+        "movies_loaded": len(movie_codes),
+        "sample_movies": dict(list(movie_codes.items())[:3]),
+        "users_loaded": len(users_data),
+        "temp_data": {
+            "video_uploads": len(temp_video_data),
+            "pending_ads": len(temp_ad_data)
+        }
+    })
+
+@app.route('/test_admin')
 def test_admin():
     """Test admin functionality"""
     return jsonify({
@@ -806,8 +820,10 @@ def handle_callback_query(chat_id, user_id, callback_data, message_id):
 
 def handle_send_advertisement(chat_id):
     """Handle send advertisement"""
+    logger.info(f"📢 Starting advertisement handler for chat {chat_id}")
     temp_ad_data[chat_id] = {'waiting_for_ad': True}
-    send_message(chat_id, "📢 Reklama matnini yoki rasmini yuboring:")
+    result = send_message(chat_id, "📢 Reklama matnini yoki rasmini yuboring:")
+    logger.info(f"📢 Advertisement prompt sent: {result}")
 
 def handle_confirm_broadcast(chat_id):
     """Handle confirm broadcast"""
