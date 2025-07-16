@@ -1800,12 +1800,42 @@ def show_system_health(chat_id):
         app_url = os.getenv('RENDER_EXTERNAL_URL', 'localhost')
         current_time = int(time.time())
         
-        # Test internal endpoints
-        health_status = "🟢 Healthy"
-        ping_status = "🟢 Active"
-        
-        try:
-            if app_url != 'localhost':
+        if app_url == 'localhost':
+            # Local development mode
+            text = f"""🔧 <b>Tizim holati - Local Development</b>
+
+💻 <b>Local Development Mode:</b>
+• Holat: 🟢 Ishlayapti
+• URL: localhost (development)
+• Keep-alive: 💡 Disabled (normal)
+• Vaqt: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}
+
+📊 <b>Bot statistikasi:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Kinolar: {len(movies_db)} ta
+• Majburiy kanallar: {len(mandatory_channels)} ta
+• Upload sessiyalar: {len(upload_sessions)} ta
+• Broadcast sessiyalar: {len(broadcast_data)} ta
+
+⚙️ <b>Development xususiyatlari:</b>
+• Platform: Local development
+• Flask server: Debug mode
+• Database: JSON fayllar
+• Keep-alive: Disabled
+
+🚀 <b>Production deploy uchun:</b>
+• Render.com ga deploy qiling
+• RENDER_EXTERNAL_URL avtomatik o'rnatiladi
+• Keep-alive avtomatik boshlanadi
+• Uptime Robot qo'shishingiz mumkin
+
+🎭 <b>Ultimate Professional Bot V3.0</b>"""
+        else:
+            # Production mode
+            health_status = "🟢 Healthy"
+            ping_status = "🟢 Active"
+            
+            try:
                 # Test ping endpoint
                 ping_response = requests.get(f"{app_url}/ping", timeout=10)
                 if ping_response.status_code != 200:
@@ -1815,15 +1845,15 @@ def show_system_health(chat_id):
                 health_response = requests.get(f"{app_url}/health", timeout=10)
                 if health_response.status_code != 200:
                     health_status = "🟡 Warning"
+                
+            except Exception as e:
+                health_status = "🔴 Error"
+                ping_status = "🔴 Error"
+                logger.error(f"❌ Health check error: {e}")
             
-        except Exception as e:
-            health_status = "🔴 Error"
-            ping_status = "🔴 Error"
-            logger.error(f"❌ Health check error: {e}")
-        
-        text = f"""🔧 <b>Tizim holati - System Health</b>
+            text = f"""🔧 <b>Tizim holati - Production Mode</b>
 
-🌐 <b>Server ma'lumotlari:</b>
+🌐 <b>Production Server:</b>
 • URL: <code>{app_url}</code>
 • Holat: {health_status}
 • Keep-alive: {ping_status}
@@ -1836,11 +1866,14 @@ def show_system_health(chat_id):
 • Upload sessiyalar: {len(upload_sessions)} ta
 • Broadcast sessiyalar: {len(broadcast_data)} ta
 
-⚙️ <b>Tizim xususiyatlari:</b>
+⚙️ <b>Production xususiyatlari:</b>
 • Platform: Render.com
 • Keep-alive interval: 10 daqiqa
 • Ping endpoint: /ping
 • Health endpoint: /health
+
+📋 <b>Uptime Robot URL:</b>
+<code>{app_url}/ping</code>
 
 🎭 <b>Ultimate Professional Bot V3.0</b>"""
 
@@ -1864,76 +1897,120 @@ def test_ping(chat_id):
         app_url = os.getenv('RENDER_EXTERNAL_URL')
         
         if not app_url:
+            # Local mode - test localhost
             send_message(chat_id, """🏓 <b>Ping Test - Local Mode</b>
 
-💡 <b>Local rejimda ishlayapti</b>
-• RENDER_EXTERNAL_URL topilmadi
-• Keep-alive disabled
+💡 <b>Local rejimda test qilinyapti...</b>
 
-✅ <b>Bot normal ishlayapti!</b>""")
+⚠️ <b>Eslatma:</b> Keep-alive tizimi faqat production (Render.com) da ishlaydi.
+
+✅ <b>Local test natijalari:</b>
+• Bot: ✅ Ishlayapti
+• Database: ✅ Ulangan
+• Flask server: ✅ Faol
+• Keep-alive: 💡 Disabled (normal)
+
+🚀 <b>Production da deploy qilgandan so'ng:</b>
+• Keep-alive avtomatik boshlanadi
+• Ping test real server bilan ishlaydi
+• Uptime Robot qo'shishingiz mumkin
+
+🎭 <b>Hozirda local development rejimida!</b>""")
             return
         
-        send_message(chat_id, "🏓 <b>Ping test boshlandi...</b>\n\n⏳ Kuting...")
+        send_message(chat_id, "🏓 <b>Production Ping Test...</b>\n\n⏳ Server javobini kuting...")
         
         start_time = time.time()
         
         try:
-            # Test ping endpoint
-            ping_response = requests.get(f"{app_url}/ping", timeout=15)
+            # Test ping endpoint with longer timeout for production
+            ping_response = requests.get(f"{app_url}/ping", timeout=30)
             ping_time = (time.time() - start_time) * 1000  # Convert to milliseconds
             
             if ping_response.status_code == 200:
                 ping_data = ping_response.json()
                 
-                result_text = f"""🏓 <b>Ping Test Natijalari</b>
+                # Determine speed status
+                if ping_time < 2000:
+                    speed_status = "🟢 Tez"
+                elif ping_time < 5000:
+                    speed_status = "🟡 O'rtacha"
+                else:
+                    speed_status = "🔴 Sekin"
+                
+                result_text = f"""🏓 <b>Production Ping Test</b>
 
 ✅ <b>Muvaffaqiyatli!</b>
+• Tezlik: {speed_status}
 • Response time: {ping_time:.0f}ms
 • Status: {ping_data.get('status', 'unknown')}
 • Message: {ping_data.get('message', 'No message')}
 
-🌐 <b>Endpoint ma'lumotlari:</b>
+🌐 <b>Server ma'lumotlari:</b>
 • URL: <code>{app_url}/ping</code>
 • Timestamp: {ping_data.get('timestamp', 'unknown')}
 • Users: {ping_data.get('users', 0)}
 • Movies: {ping_data.get('movies', 0)}
 
-🎯 <b>Keep-alive tizimi normal ishlayapti!</b>"""
-                
-                if ping_time < 1000:
-                    speed_emoji = "🟢"
-                elif ping_time < 3000:
-                    speed_emoji = "🟡"
-                else:
-                    speed_emoji = "🔴"
-                
-                result_text = f"{speed_emoji} " + result_text
+🎯 <b>Keep-alive tizimi normal ishlayapti!</b>
+
+💡 <b>Uptime Robot uchun:</b>
+Bu URLni Uptime Robot ga qo'shing: <code>{app_url}/ping</code>"""
                 
             else:
-                result_text = f"""🔴 <b>Ping Test Xatolik</b>
+                result_text = f"""🔴 <b>Production Ping Error</b>
 
-❌ <b>Response error:</b>
+❌ <b>Server xatolik:</b>
 • Status code: {ping_response.status_code}
 • Response time: {ping_time:.0f}ms
+• URL: {app_url}/ping
 
-⚠️ <b>Keep-alive tizimida muammo bo'lishi mumkin!</b>"""
+⚠️ <b>Mumkin bo'lgan sabablar:</b>
+• Server yuklanmoqda
+• Keep-alive muammosi
+• Render.com texnik ishlar
+
+🔧 <b>Tavsiya:</b> Bir necha daqiqadan keyin qayta urining."""
                 
         except requests.exceptions.Timeout:
-            result_text = """🔴 <b>Ping Test Timeout</b>
+            result_text = f"""🔴 <b>Production Ping Timeout</b>
 
-❌ <b>Timeout xatolik:</b>
-• 15 soniya ichida javob kelmadi
-• Server juda sekin yoki ishlamayapti
+❌ <b>Timeout (30 soniya):</b>
+• Server juda sekin javob bermoqda
+• Render.com free tier sleep bo'lishi mumkin
+• Keep-alive tizimi to'g'ri ishlamayapti
 
-⚠️ <b>Keep-alive tizimni tekshiring!</b>"""
+🚀 <b>Hal qilish:</b>
+1. Uptime Robot o'rnating
+2. Bir necha daqiqa kuting
+3. Server avtomatik uyg'onadi
+
+📋 <b>Uptime Robot URL:</b> <code>{app_url}/ping</code>"""
             
         except Exception as e:
-            result_text = f"""🔴 <b>Ping Test Xatolik</b>
+            error_msg = str(e)
+            if "Connection" in error_msg:
+                result_text = f"""🔴 <b>Connection Error</b>
 
-❌ <b>Xatolik:</b>
-• {str(e)}
+❌ <b>Ulanish muammosi:</b>
+• Server ishlamayapti yoki sleep rejimida
+• URL noto'g'ri: {app_url}
+• Render.com xizmati band
 
-⚠️ <b>Server muammosi yoki tarmoq xatoligi!</b>"""
+🔧 <b>Tavsiya:</b>
+1. Render.com dashboard ni tekshiring
+2. App deployment holatini ko'ring
+3. Logs ni tekshiring"""
+            else:
+                result_text = f"""🔴 <b>Production Ping Error</b>
+
+❌ <b>Noma'lum xatolik:</b>
+• {error_msg}
+
+⚠️ <b>Mumkin bo'lgan sabablar:</b>
+• Server muammosi
+• Tarmoq xatoligi
+• Render.com texnik ishlar"""
         
         keyboard = {
             'inline_keyboard': [
@@ -1947,11 +2024,42 @@ def test_ping(chat_id):
         
     except Exception as e:
         logger.error(f"❌ Ping test error: {e}")
-        send_message(chat_id, "❌ Ping test xatolik!")
+        send_message(chat_id, f"❌ Ping test ichki xatolik: {str(e)}")
 
 def show_admin_test(chat_id):
     """Show admin test"""
-    uptime_info = "Keep-alive: ✅ Faol" if os.getenv('RENDER_EXTERNAL_URL') else "Keep-alive: 💡 Local mode"
+    app_url = os.getenv('RENDER_EXTERNAL_URL')
+    
+    if app_url:
+        # Production mode
+        uptime_info = "Keep-alive: ✅ Production faol"
+        deployment_info = f"""
+📋 <b>Production Endpoints:</b>
+• Ping: <code>{app_url}/ping</code>
+• Health: <code>{app_url}/health</code>
+• Home: <code>{app_url}/</code>
+
+🔄 <b>Uptime Robot Setup:</b>
+• URL: <code>{app_url}/ping</code>
+• Interval: 5 daqiqa
+• Monitor Type: HTTP(s)
+
+💡 <b>Keep-alive har 10 daqiqada ping yuboradi!</b>"""
+    else:
+        # Local development mode
+        uptime_info = "Keep-alive: 💡 Local mode (disabled)"
+        deployment_info = f"""
+📋 <b>Local Development Mode:</b>
+• Flask server: localhost
+• Keep-alive: Disabled (normal)
+• Database: JSON fayllar
+
+🚀 <b>Production deploy uchun:</b>
+• Render.com ga deploy qiling
+• Keep-alive avtomatik boshlanadi
+• Uptime Robot URL olishingiz mumkin
+
+💡 <b>Local test maqsadida ishlamoqda!</b>"""
     
     test_text = f"""🔧 <b>Admin Test Panel</b>
     
@@ -1962,14 +2070,7 @@ def show_admin_test(chat_id):
 ✅ Channel management: OK
 ✅ {uptime_info}
 
-🎭 Ultimate Professional Bot V3.0
-
-📋 <b>Uptime Robot uchun endpoint:</b>
-• <code>/ping</code> - Ping endpoint
-• <code>/health</code> - Health check
-• <code>/</code> - Home status
-
-💡 <b>Har 10 daqiqada ping yuboriladi!</b>"""
+🎭 Ultimate Professional Bot V3.0{deployment_info}"""
     
     keyboard = {
         'inline_keyboard': [
