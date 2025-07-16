@@ -149,14 +149,19 @@ def webhook():
             
             # Process commands
             if text == '/start':
+                logger.info(f"🎬 Processing /start for user {user_id}")
                 handle_start(chat_id, user_id, first_name)
             elif text == '/admin':
+                logger.info(f"🔧 Processing /admin for user {user_id}")
                 handle_admin_menu(chat_id, user_id)
             elif text == '/stat':
+                logger.info(f"📊 Processing /stat for user {user_id}")
                 handle_stats(chat_id, user_id)
             elif text.startswith('#'):
+                logger.info(f"🎭 Processing movie request {text} for user {user_id}")
                 handle_movie_request(chat_id, text)
             else:
+                logger.info(f"💬 Processing regular message for user {user_id}")
                 # Check if waiting for input
                 handle_regular_message(chat_id, user_id, text, message)
                 
@@ -186,6 +191,8 @@ def webhook():
 
 def handle_start(chat_id, user_id, first_name):
     """Handle /start command"""
+    logger.info(f"🎬 handle_start called: chat_id={chat_id}, user_id={user_id}, first_name={first_name}")
+    
     welcome_text = f"""🎬 <b>Kino Bot</b>ga xush kelibsiz, {first_name}!
 
 🔍 <b>Kino qidirish:</b>
@@ -203,7 +210,9 @@ Kino kodini yuboring (masalan: <code>#123</code>)
         ]
     }
     
-    send_message_with_keyboard(chat_id, welcome_text, keyboard)
+    logger.info(f"📤 Sending welcome message to {chat_id}")
+    result = send_message_with_keyboard(chat_id, welcome_text, keyboard)
+    logger.info(f"📤 Send result: {result}")
 
 def handle_admin_menu(chat_id, user_id):
     """Handle admin menu"""
@@ -675,7 +684,8 @@ def send_message(chat_id, text):
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         data = {
             "chat_id": chat_id,
-            "text": text
+            "text": text,
+            "parse_mode": "HTML"
         }
         
         logger.info(f"📤 Sending message to {chat_id}: {text[:50]}...")
