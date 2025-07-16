@@ -120,8 +120,20 @@ def handle_message(message):
         # Handle commands
         if text == '/start':
             handle_start(chat_id, user_id)
-        elif text == '/admin' and user_id == ADMIN_ID:
-            handle_admin_menu(chat_id, user_id)
+        elif text == '/admin':
+            if user_id == ADMIN_ID:
+                handle_admin_menu(chat_id, user_id)
+            else:
+                send_message(chat_id, """❌ <b>Admin paneli</b>
+
+🔐 Bu panel faqat admin uchun mo'ljallangan.
+
+🎬 <b>Siz uchun mavjud:</b>
+• Kino kodlarini yuborish
+• Kinolar ro'yxatini ko'rish
+• Yordam olish
+
+💡 Kino olish uchun kod yuboring: <code>#123</code>""")
         elif text == '/stat':
             handle_stats(chat_id, user_id)
         elif 'video' in message:
@@ -136,7 +148,9 @@ def handle_message(message):
 
 def handle_start(chat_id, user_id):
     """Handle /start command"""
-    start_text = f"""🎭 <b>Ultimate Professional Kino Bot V3.0</b>
+    if user_id == ADMIN_ID:
+        # Admin version with statistics
+        start_text = f"""🎭 <b>Ultimate Professional Kino Bot V3.0</b>
 
 👋 Xush kelibsiz! Eng professional kino bot xizmatida!
 
@@ -156,17 +170,40 @@ def handle_start(chat_id, user_id):
 
 🎬 <b>Hoziroq kino kodi bilan boshlang!</b>"""
 
-    keyboard = {
-        'inline_keyboard': [
-            [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_movies'}],
-            [{'text': '📊 Statistika', 'callback_data': 'show_stats'}],
-            [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
-        ]
-    }
-    
-    # Add admin button if user is admin
-    if user_id == ADMIN_ID:
-        keyboard['inline_keyboard'].append([{'text': '👑 Admin Panel', 'callback_data': 'admin_menu'}])
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_movies'}],
+                [{'text': '📊 Statistika', 'callback_data': 'show_stats'}],
+                [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}],
+                [{'text': '👑 Admin Panel', 'callback_data': 'admin_menu'}]
+            ]
+        }
+    else:
+        # Regular user version without statistics
+        start_text = f"""🎭 <b>Ultimate Professional Kino Bot V3.0</b>
+
+👋 Xush kelibsiz! Eng professional kino bot xizmatida!
+
+🔍 <b>Kino qidirish:</b>
+• Kino kodini yuboring: <code>#123</code>
+• Yoki faqat raqam: <code>123</code>
+
+🎬 <b>Mavjud kinolar:</b> {len(movies_db)} ta
+
+💎 <b>Premium xususiyatlar:</b>
+• Yuqori sifatli videolar
+• Tezkor qidiruv tizimi  
+• Professional interfeys
+• Barcha janrlar
+
+🎬 <b>Hoziroq kino kodi bilan boshlang!</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_movies'}],
+                [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
+            ]
+        }
     
     send_message(chat_id, start_text, keyboard)
 
@@ -199,7 +236,19 @@ def handle_admin_menu(chat_id, user_id):
     send_message(chat_id, admin_text, keyboard)
 
 def handle_stats(chat_id, user_id):
-    """Handle statistics"""
+    """Handle statistics - Admin only"""
+    if user_id != ADMIN_ID:
+        send_message(chat_id, """❌ <b>Kirish rad etildi!</b>
+
+🔐 Bu ma'lumot faqat admin uchun mo'ljallangan.
+
+🎬 <b>Kino qidirish uchun:</b>
+• Kino kodini yuboring: <code>#123</code>
+• Yoki raqam: <code>123</code>
+
+💡 Mavjud kinolar ro'yxatini ko'rish uchun "🎬 Mavjud kinolar" tugmasini bosing.""")
+        return
+        
     total_users = len(users_db)
     total_movies = len(movies_db)
     
@@ -208,7 +257,7 @@ def handle_stats(chat_id, user_id):
     day_ago = current_time - 86400
     active_today = sum(1 for user in users_db.values() if user.get('last_seen', 0) > day_ago)
     
-    stats_text = f"""📊 <b>Bot Statistikasi</b>
+    stats_text = f"""📊 <b>Admin Statistika</b>
 
 👥 <b>Foydalanuvchilar:</b>
 • Jami: {total_users}
@@ -224,7 +273,8 @@ def handle_stats(chat_id, user_id):
 
     keyboard = {
         'inline_keyboard': [
-            [{'text': '🎬 Barcha kinolar', 'callback_data': 'show_all_movies'}]
+            [{'text': '🎬 Barcha kinolar', 'callback_data': 'show_all_movies'}],
+            [{'text': '👑 Admin Panel', 'callback_data': 'admin_menu'}]
         ]
     }
     
@@ -632,6 +682,8 @@ def handle_callback(callback_query):
                 show_admin_test(chat_id)
             else:
                 send_message(chat_id, "❌ Admin huquqi kerak!")
+        elif data == 'back_to_start':
+            handle_start(chat_id, user_id)
         else:
             send_message(chat_id, f"❓ Noma'lum buyruq: {data}")
             
@@ -754,11 +806,11 @@ def handle_broadcast_content(chat_id, message):
                 session['file_id'] = file_id
                 session['caption'] = caption
                 
-                preview_text = f"""� <b>Rasmli reklama tayyor!</b>
+                preview_text = f"""📸 <b>Rasmli reklama tayyor!</b>
 
-📝 <b>Caption:</b> {caption if caption else 'Caption yo\'q'}
+📝 <b>Caption:</b> {caption if caption else 'Caption yoq'}
 
-📊 <b>Yuborilish ma\'lumotlari:</b>
+📊 <b>Yuborilish ma'lumotlari:</b>
 • Foydalanuvchilar: {len(users_db)} ta
 • Turi: Rasmli reklama
 
@@ -782,11 +834,11 @@ def handle_broadcast_content(chat_id, message):
                 
                 preview_text = f"""🎬 <b>Videoli reklama tayyor!</b>
 
-📝 <b>Caption:</b> {caption if caption else 'Caption yo\'q'}
+📝 <b>Caption:</b> {caption if caption else 'Caption yoq'}
 📦 <b>Hajmi:</b> {size_mb:.1f} MB
 ⏱ <b>Davomiyligi:</b> {duration} soniya
 
-📊 <b>Yuborilish ma\'lumotlari:</b>
+📊 <b>Yuborilish ma'lumotlari:</b>
 • Foydalanuvchilar: {len(users_db)} ta
 • Turi: Videoli reklama
 
@@ -804,7 +856,7 @@ def handle_broadcast_content(chat_id, message):
 📄 <b>Matn:</b> 
 {text}
 
-📊 <b>Yuborilish ma\'lumotlari:</b>
+📊 <b>Yuborilish ma'lumotlari:</b>
 • Foydalanuvchilar: {len(users_db)} ta
 • Turi: Matnli reklama
 
@@ -988,10 +1040,30 @@ def show_admin_movies_list(chat_id):
 def show_movies_list(chat_id, user_id):
     """Show available movies"""
     if not movies_db:
-        send_message(chat_id, "📋 Hozircha kinolar mavjud emas.")
+        no_movies_text = """📋 <b>Hozircha kinolar mavjud emas</b>
+
+🔄 Admin tomonidan kinolar tez orada qo'shiladi.
+
+💡 <b>Qanday ishlaydi:</b>
+• Kino kodi yuborilganda avtomatik yuklanadi
+• Yuqori sifatli videolar
+• Tez yuklanish
+
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}]
+            ]
+        }
+        send_message(chat_id, no_movies_text, keyboard)
         return
     
-    movies_text = f"🎬 <b>Mavjud kinolar ({len(movies_db)} ta):</b>\n\n"
+    movies_text = f"""🎬 <b>Mavjud kinolar ({len(movies_db)} ta)</b>
+
+📋 <b>Kinolar ro'yxati:</b>
+
+"""
     
     count = 0
     for code, movie_data in list(movies_db.items())[:15]:
@@ -1008,9 +1080,21 @@ def show_movies_list(chat_id, user_id):
     if len(movies_db) > 15:
         movies_text += f"... va yana {len(movies_db) - 15} ta kino\n\n"
     
-    movies_text += "💡 <b>Kino olish uchun kodni yuboring!</b>"
+    movies_text += """💡 <b>Kino olish uchun:</b>
+• Yuqoridagi kodlardan birini yuboring
+• Masalan: <code>123</code> yoki <code>#123</code>
+• Video avtomatik yuboriladi
+
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}],
+            [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
+        ]
+    }
     
-    send_message(chat_id, movies_text)
+    send_message(chat_id, movies_text, keyboard)
 
 def show_help(chat_id):
     """Show help information"""
@@ -1021,19 +1105,23 @@ def show_help(chat_id):
 • Yoki raqam: <code>123</code>
 • Kino avtomatik yuboriladi
 
-📊 <b>Komandalar:</b>
+📊 <b>Asosiy komandalar:</b>
 • /start - Bosh sahifa
-• /stat - Statistika
-• /admin - Admin panel
+• Kino kodi yuborish
 
 🎬 <b>Hozirda mavjud:</b> {len(movies_db)} ta kino
+
+💡 <b>Maslahat:</b>
+• Aniq kino kodini kiriting
+• # belgisi ixtiyoriy
+• Kinolar yuqori sifatda
 
 🎭 <b>Ultimate Professional darajada xizmat!</b>"""
 
     keyboard = {
         'inline_keyboard': [
             [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
-            [{'text': '📊 Statistika', 'callback_data': 'show_stats'}]
+            [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}]
         ]
     }
     
