@@ -9,6 +9,7 @@ import logging
 import json
 import time
 import requests
+import traceback
 from flask import Flask, request, jsonify
 
 # Configure detailed logging
@@ -950,6 +951,12 @@ def handle_callback(callback_query):
             else:
                 send_message(chat_id, "❌ Admin huquqi kerak!")
                 
+        elif data == 'admin_test':
+            if user_id == ADMIN_ID:
+                show_admin_test(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
         else:
             logger.warning(f"⚠️ Unknown callback: '{data}'")
             send_message(chat_id, f"❓ Noma'lum buyruq: {data}")
@@ -1048,6 +1055,183 @@ def show_users_list(chat_id):
     send_message(chat_id, users_text)
 
 def show_admin_movies_list(chat_id):
+    """Show movies list for admin with detailed info"""
+    if not movies_db:
+        send_message(chat_id, "📋 Hozircha kinolar yo'q.")
+        return
+    
+    movies_text = f"""🎬 <b>Admin - Kinolar ro'yxati</b>
+
+📊 <b>Jami kinolar:</b> {len(movies_db)}
+
+🎭 <b>Kinolar:</b>"""
+
+    count = 0
+    total_size = 0
+    
+    for code, movie_data in list(movies_db.items())[:10]:  # Show max 10
+        count += 1
+        
+        if isinstance(movie_data, str):
+            title = f"Kino #{code}"
+            size = 0
+            duration = 0
+        else:
+            title = movie_data.get('title', f"Kino #{code}")
+            size = movie_data.get('file_size', 0)
+            duration = movie_data.get('duration', 0)
+        
+        total_size += size
+        size_mb = size / (1024 * 1024) if size > 0 else 0
+        
+        movies_text += f"\n\n{count}. <b>{title}</b>"
+        movies_text += f"\n   📁 Kod: <code>#{code}</code>"
+        
+        if size_mb > 0:
+            movies_text += f"\n   📦 Hajmi: {size_mb:.1f} MB"
+        
+        if duration > 0:
+            hours = duration // 3600
+            minutes = (duration % 3600) // 60
+            if hours > 0:
+                movies_text += f"\n   ⏱ Davomiyligi: {hours}:{minutes:02d}"
+            else:
+                movies_text += f"\n   ⏱ Davomiyligi: {minutes} daqiqa"
+    
+    if len(movies_db) > 10:
+        movies_text += f"\n\n... va yana {len(movies_db) - 10} ta kino"
+    
+    total_size_mb = total_size / (1024 * 1024)
+    movies_text += f"\n\n💾 <b>Umumiy hajmi:</b> {total_size_mb:.1f} MB"
+    movies_text += f"\n🎭 <b>Ultimate Professional Kino Bot</b>"
+    
+    send_message(chat_id, movies_text)
+
+def show_movies_list(chat_id, user_id):
+    """Show available movies"""
+    if not movies_db:
+        send_message(chat_id, "📋 Hozircha kinolar mavjud emas.")
+        return
+    
+    movies_text = f"🎬 <b>Mavjud kinolar ({len(movies_db)} ta):</b>\n\n"
+    
+    count = 0
+    for code, movie_data in list(movies_db.items())[:15]:  # Show max 15
+        count += 1
+        
+        if isinstance(movie_data, str):
+            title = f"Kino {code}"
+        else:
+            title = movie_data.get('title', f"Kino {code}")
+        
+        movies_text += f"{count}. <b>{title}</b>\n"
+        movies_text += f"   📁 Kod: <code>{code}</code>\n\n"
+    
+    if len(movies_db) > 15:
+        movies_text += f"... va yana {len(movies_db) - 15} ta kino\n\n"
+    
+    movies_text += "💡 <b>Kino olish uchun kodni yuboring!</b>"
+    
+    send_message(chat_id, movies_text)
+
+def show_help(chat_id):
+    """Show help information"""
+    help_text = f"""ℹ️ <b>Ultimate Professional Kino Bot Yordami</b>
+
+🔍 <b>Kino qidirish:</b>
+• Kino kodini yuboring: <code>#123</code>
+• Yoki raqam: <code>123</code>
+• Kino avtomatik yuboriladi
+
+📊 <b>Komandalar:</b>
+• /start - Bosh sahifa
+• /stat - Statistika
+• /admin - Admin panel
+
+🎬 <b>Hozirda mavjud:</b> {len(movies_db)} ta kino
+
+🎭 <b>Ultimate Professional darajada xizmat!</b>"""
+
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
+            [{'text': '📊 Statistika', 'callback_data': 'show_stats'}]
+        ]
+    }
+    
+    send_message(chat_id, help_text, keyboard)
+
+def show_admin_stats(chat_id):
+    """Show detailed admin statistics"""
+    current_time = int(time.time())
+    day_ago = current_time - 86400
+    week_ago = current_time - 604800
+    
+    daily_users = sum(1 for user in users_db.values() if user.get('last_seen', 0) > day_ago)
+    weekly_users = sum(1 for user in users_db.values() if user.get('last_seen', 0) > week_ago)
+    
+    total_size = sum(
+        movie.get('file_size', 0) if isinstance(movie, dict) else 0 
+        for movie in movies_db.values()
+    )
+    total_size_mb = total_size / (1024 * 1024)
+    
+    stats_text = f"""📊 <b>Ultimate Admin Statistika</b>
+
+👥 <b>Foydalanuvchilar:</b>
+• Jami: {len(users_db)}
+• Bugun faol: {daily_users}
+• Hafta faol: {weekly_users}
+
+🎬 <b>Kinolar:</b>
+• Jami: {len(movies_db)}
+• Umumiy hajmi: {total_size_mb:.1f} MB
+
+⚙️ <b>Tizim:</b>
+• Upload sessiyalar: {len(upload_sessions)}
+• Bot versiyasi: 3.0 Ultimate
+
+🎭 <b>Ultimate Professional Bot!</b>"""
+
+    send_message(chat_id, stats_text)
+
+def setup_webhook():
+    """Setup webhook"""
+    try:
+        webhook_url = os.getenv('RENDER_EXTERNAL_URL')
+        if webhook_url:
+            webhook_url = f"{webhook_url}/webhook"
+            
+            result = telegram_request('setWebhook', {'url': webhook_url})
+            if result:
+                logger.info(f"✅ Ultimate webhook set: {webhook_url}")
+            else:
+                logger.error(f"❌ Webhook setup failed")
+        else:
+            logger.warning("⚠️ No RENDER_EXTERNAL_URL found")
+            
+    except Exception as e:
+        logger.error(f"❌ Webhook setup error: {e}")
+
+# Initialize on startup
+logger.info("🚀 Starting Ultimate Professional Kino Bot...")
+load_database()
+setup_webhook()
+
+# For gunicorn
+application = app
+
+if __name__ == "__main__":
+    logger.info("🎭 Ultimate Professional Kino Bot starting...")
+    
+    port = int(os.environ.get('PORT', 8080))
+    logger.info(f"🚀 Server starting on port {port}")
+    
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=False
+    )
     """Show movies list for admin with detailed info"""
     if not movies_db:
         send_message(chat_id, "📋 Hozircha kinolar yo'q.")
