@@ -1112,7 +1112,7 @@ def handle_add_channel_id(chat_id, channel_input):
         
         # Get channel info
         chat_info = result.get('result', {})
-        channel_name = chat_info.get('title', 'Noma\'lum kanal')
+        channel_name = chat_info.get('title', 'Noma\'lun kanal')
         
         # Store in session for confirmation
         upload_sessions[chat_id].update({
@@ -1207,7 +1207,7 @@ def show_remove_channel_menu(chat_id):
     
     buttons = []
     for channel_id, channel_info in mandatory_channels.items():
-        channel_name = channel_info.get('name', 'Noma\'lum')
+        channel_name = channel_info.get('name', 'Noma\'lun')
         buttons.append([{'text': f'❌ {channel_name}', 'callback_data': f'remove_ch_{channel_id}'}])
     
     buttons.append([{'text': '🔙 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}])
@@ -1219,9 +1219,8 @@ def show_remove_channel_menu(chat_id):
 def remove_channel(chat_id, channel_id):
     """Remove channel from mandatory list"""
     if channel_id in mandatory_channels:
-        channel_name = mandatory_channels[channel_id].get('name', 'Noma\'lum')
+        channel_name = mandatory_channels[channel_id].get('name', 'Noma\'lun')
         del mandatory_channels[channel_id]
-        # Auto-save after channel removal
         auto_save_database()
         
         text = f"""✅ <b>Kanal o'chirildi!</b>
@@ -1452,7 +1451,7 @@ def test_ping(chat_id):
 🚀 <b>Production da deploy qilgandan so'ng:</b>
 • Keep-alive avtomatik boshlanadi
 • Ping test real server bilan ishlaydi
-• Uptime Robot URL olishingiz mumkin
+• Uptime Robot qo'shishingiz mumkin
 
 🎭 <b>Hozirda local development rejimida!</b>""")
             return
@@ -1552,7 +1551,6 @@ logger.info("🚀 Starting Ultimate Professional Kino Bot V3.0...")
 load_database()
 setup_webhook()
 start_keep_alive()
-start_backup_system()  # Start periodic backup
 
 # For gunicorn compatibility
 application = app
@@ -1566,6 +1564,8 @@ if __name__ == "__main__":
     app.run(
         host='0.0.0.0',
         port=port,
+        debug=False
+    )
         debug=False
     )
             channel_id = '@' + channel_id
