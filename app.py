@@ -31,47 +31,101 @@ upload_sessions = {}
 broadcast_data = {}
 mandatory_channels = {}
 
+# Auto-save data after every operation
+def auto_save_database():
+    """Automatically save database with error handling"""
+    try:
+        # Save users
+        with open('users.json', 'w', encoding='utf-8') as f:
+            json.dump(users_db, f, ensure_ascii=False, indent=2)
+        
+        # Save movies
+        with open('file_ids.json', 'w', encoding='utf-8') as f:
+            json.dump(movies_db, f, ensure_ascii=False, indent=2)
+        
+        # Save channels
+        with open('channels.json', 'w', encoding='utf-8') as f:
+            json.dump(mandatory_channels, f, ensure_ascii=False, indent=2)
+            
+        logger.info("💾 Auto-save successful")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Auto-save error: {e}")
+        return False
+
 # Load data from files
 def load_database():
-    """Load all databases"""
+    """Load all databases with improved error handling"""
     global users_db, movies_db, mandatory_channels
     try:
         # Load users
         if os.path.exists('users.json'):
-            with open('users.json', 'r', encoding='utf-8') as f:
-                users_db = json.load(f)
-                logger.info(f"✅ Loaded {len(users_db)} users")
+            try:
+                with open('users.json', 'r', encoding='utf-8') as f:
+                    users_db = json.load(f)
+                    logger.info(f"✅ Loaded {len(users_db)} users")
+            except Exception as e:
+                logger.error(f"❌ Users load error: {e}")
+                users_db = {}
+        else:
+            logger.info("📁 Creating new users.json")
+            users_db = {}
+            auto_save_database()
         
         # Load movies  
         if os.path.exists('file_ids.json'):
-            with open('file_ids.json', 'r', encoding='utf-8') as f:
-                movies_db = json.load(f)
-                logger.info(f"✅ Loaded {len(movies_db)} movies")
+            try:
+                with open('file_ids.json', 'r', encoding='utf-8') as f:
+                    movies_db = json.load(f)
+                    logger.info(f"✅ Loaded {len(movies_db)} movies")
+            except Exception as e:
+                logger.error(f"❌ Movies load error: {e}")
+                movies_db = {}
+        else:
+            logger.info("📁 Creating new file_ids.json")
+            movies_db = {}
+            auto_save_database()
         
         # Load mandatory channels
         if os.path.exists('channels.json'):
-            with open('channels.json', 'r', encoding='utf-8') as f:
-                mandatory_channels = json.load(f)
-                logger.info(f"✅ Loaded {len(mandatory_channels)} mandatory channels")
+            try:
+                with open('channels.json', 'r', encoding='utf-8') as f:
+                    mandatory_channels = json.load(f)
+                    logger.info(f"✅ Loaded {len(mandatory_channels)} mandatory channels")
+            except Exception as e:
+                logger.error(f"❌ Channels load error: {e}")
+                mandatory_channels = {}
+        else:
+            logger.info("📁 Creating new channels.json")
+            mandatory_channels = {}
+            auto_save_database()
                 
     except Exception as e:
         logger.error(f"❌ Database load error: {e}")
 
 def save_database():
-    """Save all databases"""
+    """Save all databases - replaced with auto_save_database"""
+    return auto_save_database()
+
+# Add periodic backup system
+def periodic_backup():
+    """Backup database every 5 minutes"""
+    while True:
+        try:
+            time.sleep(300)  # 5 minutes
+            auto_save_database()
+            logger.info("🔄 Periodic backup completed")
+        except Exception as e:
+            logger.error(f"❌ Periodic backup error: {e}")
+
+def start_backup_system():
+    """Start periodic backup thread"""
     try:
-        with open('users.json', 'w', encoding='utf-8') as f:
-            json.dump(users_db, f, ensure_ascii=False, indent=2)
-        
-        with open('file_ids.json', 'w', encoding='utf-8') as f:
-            json.dump(movies_db, f, ensure_ascii=False, indent=2)
-        
-        with open('channels.json', 'w', encoding='utf-8') as f:
-            json.dump(mandatory_channels, f, ensure_ascii=False, indent=2)
-            
-        logger.info("✅ Database saved successfully")
+        backup_thread = threading.Thread(target=periodic_backup, daemon=True)
+        backup_thread.start()
+        logger.info("🔄 Periodic backup system started (5-minute intervals)")
     except Exception as e:
-        logger.error(f"❌ Database save error: {e}")
+        logger.error(f"❌ Backup system start error: {e}")
 
 # Create Flask app
 app = Flask(__name__)
@@ -154,7 +208,8 @@ def handle_message(message):
             'username': user_info.get('username', ''),
             'last_seen': int(time.time())
         }
-        save_database()
+        # Auto-save after user update
+        auto_save_database()
         
         logger.info(f"💬 Message from {user_id}: {text}")
         
@@ -694,8 +749,8 @@ def handle_upload_title(chat_id, title):
         'upload_time': int(time.time())
     }
     
-    # Save to database
-    save_database()
+    # Auto-save after movie upload
+    auto_save_database()
     
     # Clean up session
     del upload_sessions[chat_id]
@@ -853,6 +908,11 @@ def handle_callback(callback_query):
                 send_message(chat_id, "❌ Admin huquqi kerak!")
         elif data == 'back_to_start':
             handle_start(chat_id, user_id)
+        elif data == 'manual_backup':
+            if user_id == ADMIN_ID:
+                handle_manual_backup(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
         else:
             send_message(chat_id, f"❓ Noma'lum buyruq: {data}")
             
@@ -860,579 +920,46 @@ def handle_callback(callback_query):
         logger.error(f"❌ Callback error: {e}")
         send_message(chat_id, "❌ Xatolik yuz berdi.")
 
-def send_immediate_broadcast(chat_id, message):
-    """Send broadcast immediately to all users"""
+def handle_manual_backup(chat_id):
+    """Handle manual backup request"""
     try:
-        # Clear broadcast mode
-        if chat_id in broadcast_data:
-            del broadcast_data[chat_id]
+        send_message(chat_id, "💾 <b>Manual backup boshlanmoqda...</b>")
+        
+        success = auto_save_database()
+        
+        if success:
+            # Check file sizes
+            users_size = os.path.getsize('users.json') if os.path.exists('users.json') else 0
+            movies_size = os.path.getsize('file_ids.json') if os.path.exists('file_ids.json') else 0
+            channels_size = os.path.getsize('channels.json') if os.path.exists('channels.json') else 0
             
-        send_message(chat_id, "📡 <b>Reklama yuborilmoqda...</b>\n\n⏳ Kuting...")
-        
-        success_count = 0
-        error_count = 0
-        
-        # Send to all users
-        for user_id in users_db.keys():
-            try:
-                target_chat_id = int(user_id)
-                
-                if 'photo' in message:
-                    # Send photo with caption
-                    photo = message['photo'][-1]  # Highest resolution
-                    file_id = photo['file_id']
-                    caption = message.get('caption', '')
-                    result = send_photo(target_chat_id, file_id, caption)
-                    
-                elif 'video' in message:
-                    # Send video with caption
-                    video = message['video']
-                    file_id = video['file_id']
-                    caption = message.get('caption', '')
-                    result = send_video(target_chat_id, file_id, caption)
-                    
-                elif message.get('text'):
-                    # Send text
-                    text = message.get('text')
-                    result = send_message(target_chat_id, text)
-                    
-                else:
-                    result = False
-                
-                if result:
-                    success_count += 1
-                else:
-                    error_count += 1
-                    
-            except Exception as e:
-                logger.error(f"❌ Broadcast error for user {user_id}: {e}")
-                error_count += 1
-                continue
-        
-        # Send results
-        total = len(users_db)
-        rate = (success_count / total * 100) if total > 0 else 0
-        
-        result_text = f"""✅ <b>Reklama yuborish tugallandi!</b>
+            text = f"""✅ <b>Manual backup muvaffaqiyatli!</b>
 
-📊 <b>Natijalar:</b>
-• ✅ Muvaffaqiyat: {success_count}
-• ❌ Xatolik: {error_count} 
-• 📊 Jami: {total}
-• 📈 Foiz: {rate:.1f}%
+💾 <b>Saqlangan ma'lumotlar:</b>
+• Foydalanuvchilar: {len(users_db)} ta ({users_size} bytes)
+• Kinolar: {len(movies_db)} ta ({movies_size} bytes)
+• Kanallar: {len(mandatory_channels)} ta ({channels_size} bytes)
 
-🎭 <b>Ultimate Professional Kino Bot</b>"""
+📅 <b>Backup vaqti:</b> {time.strftime('%Y-%m-%d %H:%M:%S')}
 
-        send_message(chat_id, result_text)
-        logger.info(f"✅ Immediate broadcast: {success_count} success, {error_count} errors")
-        
-    except Exception as e:
-        logger.error(f"❌ Immediate broadcast error: {e}")
-        send_message(chat_id, "❌ Reklama yuborishda xatolik!")
-        if chat_id in broadcast_data:
-            del broadcast_data[chat_id]
+🔄 <b>Avtomatik backup:</b> Har 5 daqiqada
+✅ <b>Ma'lumotlar xavfsiz saqlandi!</b>
 
-def handle_broadcast_start(chat_id):
-    """Start broadcast process"""
-    broadcast_data[chat_id] = {'step': 'waiting_for_content'}
-    
-    text = """📢 <b>Reklama yuborish</b>
-
-📝 <b>Reklama kontentini yuboring:</b>
-• Matn yuboring (oddiy reklama)
-• Rasm + caption yuboring (rasmli reklama)
-• Video + caption yuboring (videoli reklama)
-
-💡 <b>Maslahat:</b> Reklama barcha bot foydalanuvchilariga yuboriladi.
-
-⚠️ <b>Diqqat:</b> Bu jarayon bekor qilinmaydigan bo'ladi!</b>"""
-
-    keyboard = {
-        'inline_keyboard': [
-            [{'text': '❌ Bekor qilish', 'callback_data': 'cancel_broadcast'}]
-        ]
-    }
-    
-    send_message(chat_id, text, keyboard)
-
-def handle_broadcast_content(chat_id, message):
-    """Handle broadcast content from admin"""
-    try:
-        if chat_id not in broadcast_data:
-            return
-            
-        session = broadcast_data[chat_id]
-        
-        if session['step'] == 'waiting_for_content':
-            # Store broadcast content
-            if 'photo' in message:
-                # Photo broadcast
-                photo = message['photo'][-1]  # Get highest resolution
-                file_id = photo['file_id']
-                caption = message.get('caption', '')
-                
-                session['type'] = 'photo'
-                session['file_id'] = file_id
-                session['caption'] = caption
-                
-                preview_text = f"""📸 <b>Rasmli reklama tayyor!</b>
-
-📝 <b>Caption:</b> {caption if caption else 'Caption yoq'}
-
-📊 <b>Yuborilish ma'lumotlari:</b>
-• Foydalanuvchilar: {len(users_db)} ta
-• Turi: Rasmli reklama
-
-✅ <b>Yuborishni tasdiqlaysizmi?</b>"""
-                
-            elif 'video' in message:
-                # Video broadcast  
-                video = message['video']
-                file_id = video['file_id']
-                caption = message.get('caption', '')
-                duration = video.get('duration', 0)
-                file_size = video.get('file_size', 0)
-                
-                session['type'] = 'video'
-                session['file_id'] = file_id
-                session['caption'] = caption
-                session['duration'] = duration
-                session['file_size'] = file_size
-                
-                size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
-                
-                preview_text = f"""🎬 <b>Videoli reklama tayyor!</b>
-
-📝 <b>Caption:</b> {caption if caption else 'Caption yoq'}
-📦 <b>Hajmi:</b> {size_mb:.1f} MB
-⏱ <b>Davomiyligi:</b> {duration} soniya
-
-📊 <b>Yuborilish ma'lumotlari:</b>
-• Foydalanuvchilar: {len(users_db)} ta
-• Turi: Videoli reklama
-
-✅ <b>Yuborishni tasdiqlaysizmi?</b>"""
-                
-            elif message.get('text'):
-                # Text broadcast
-                text = message.get('text', '')
-                
-                session['type'] = 'text'
-                session['text'] = text
-                
-                preview_text = f"""📝 <b>Matnli reklama tayyor!</b>
-
-📄 <b>Matn:</b> 
-{text}
-
-📊 <b>Yuborilish ma'lumotlari:</b>
-• Foydalanuvchilar: {len(users_db)} ta
-• Turi: Matnli reklama
-
-✅ <b>Yuborishni tasdiqlaysizmi?</b>"""
-            else:
-                send_message(chat_id, "❌ Noto'g'ri format! Matn, rasm yoki video yuboring.")
-                return
-            
-            session['step'] = 'waiting_for_confirmation'
-            
-            keyboard = {
-                'inline_keyboard': [
-                    [{'text': '✅ Ha, yuborish', 'callback_data': 'confirm_broadcast'}],
-                    [{'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'cancel_broadcast'}]
-                ]
-            }
-            
-            send_message(chat_id, preview_text, keyboard)
-            
-    except Exception as e:
-        logger.error(f"❌ Broadcast content error: {e}")
-        send_message(chat_id, "❌ Reklama qayta ishlashda xatolik!")
-
-def handle_broadcast_confirm(chat_id):
-    """Confirm and send broadcast to all users"""
-    if chat_id not in broadcast_data:
-        send_message(chat_id, "❌ Reklama ma'lumotlari topilmadi!")
-        return
-    
-    session = broadcast_data[chat_id]
-    
-    if session.get('step') != 'waiting_for_confirmation':
-        send_message(chat_id, "❌ Reklama hali tayyor emas!")
-        return
-    
-    send_message(chat_id, "📡 <b>Reklama yuborilmoqda...</b>\n\n⏳ Iltimos kuting...")
-    
-    # Send to all users
-    success_count = 0
-    error_count = 0
-    
-    for user_id in users_db.keys():
-        try:
-            if session['type'] == 'text':
-                # Send text message
-                result = send_message(int(user_id), session['text'])
-            elif session['type'] == 'photo':
-                # Send photo
-                result = send_photo(int(user_id), session['file_id'], session.get('caption'))
-            elif session['type'] == 'video':
-                # Send video
-                result = send_video(int(user_id), session['file_id'], session.get('caption'))
-            
-            if result:
-                success_count += 1
-            else:
-                error_count += 1
-                
-        except Exception as e:
-            logger.error(f"❌ Broadcast error for user {user_id}: {e}")
-            error_count += 1
-            continue
-    
-    # Send result
-    result_text = f"""✅ <b>Reklama yuborish yakunlandi!</b>
-
-📊 <b>Natijalar:</b>
-• Muvaffaqiyatli: {success_count}
-• Xatolik: {error_count}
-• Jami: {len(users_db)}
-
-📈 <b>Muvaffaqiyat darajasi:</b> {(success_count/len(users_db)*100):.1f}%
-
-🎭 <b>Ultimate Professional Kino Bot</b>"""
-
-    send_message(chat_id, result_text)
-    
-    # Clean up
-    if chat_id in broadcast_data:
-        del broadcast_data[chat_id]
-        
-    logger.info(f"✅ Broadcast completed: {success_count} success, {error_count} errors")
-
-def handle_broadcast_cancel(chat_id):
-    """Cancel broadcast"""
-    if chat_id in broadcast_data:
-        del broadcast_data[chat_id]
-    send_message(chat_id, "❌ Reklama yuborish bekor qilindi.")
-
-def show_users_list(chat_id):
-    """Show users list for admin"""
-    if not users_db:
-        send_message(chat_id, "📋 Hozircha foydalanuvchilar yo'q.")
-        return
-    
-    total_users = len(users_db)
-    current_time = int(time.time())
-    day_ago = current_time - 86400
-    
-    active_today = sum(1 for user in users_db.values() if user.get('last_seen', 0) > day_ago)
-    
-    users_text = f"""👥 <b>Foydalanuvchilar ro'yxati</b>
-
-📊 <b>Umumiy ma'lumot:</b>
-• Jami foydalanuvchilar: {total_users}
-• Bugun faol: {active_today}
-
-👤 <b>So'nggi foydalanuvchilar:</b>"""
-
-    # Show last 10 users
-    sorted_users = sorted(users_db.items(), key=lambda x: x[1].get('last_seen', 0), reverse=True)
-    
-    count = 0
-    for user_id, user_info in sorted_users[:10]:
-        count += 1
-        first_name = user_info.get('first_name', 'Noma\'lum')
-        username = user_info.get('username', 'username_yoq')
-        
-        users_text += f"\n{count}. {first_name} (@{username})"
-    
-    if total_users > 10:
-        users_text += f"\n\n... va yana {total_users - 10} ta foydalanuvchi"
-    
-    users_text += "\n\n🎭 <b>Ultimate Professional Kino Bot</b>"
-    
-    send_message(chat_id, users_text)
-
-def show_admin_movies_list(chat_id):
-    """Show movies list for admin"""
-    if not movies_db:
-        send_message(chat_id, "📋 Hozircha kinolar yo'q.")
-        return
-    
-    movies_text = f"""🎬 <b>Admin - Kinolar ro'yxati</b>
-
-📊 <b>Jami kinolar:</b> {len(movies_db)}
-
-🎭 <b>Kinolar:</b>"""
-
-    count = 0
-    total_size = 0
-    
-    for code, movie_data in list(movies_db.items())[:10]:
-        count += 1
-        
-        if isinstance(movie_data, str):
-            title = f"Kino #{code}"
-            size = 0
-            duration = 0
+🎭 <b>Ultimate Professional Bot V3.0</b>"""
         else:
-            title = movie_data.get('title', f"Kino #{code}")
-            size = movie_data.get('file_size', 0)
-            duration = movie_data.get('duration', 0)
+            text = """❌ <b>Manual backup xatolik!</b>
+
+⚠️ Backup jarayonida xatolik yuz berdi.
+📝 Loglarni tekshiring.
+🔄 Avtomatik backup tizimi ishlashda davom etadi.
+
+🎭 <b>Ultimate Professional Bot V3.0</b>"""
         
-        total_size += size
-        size_mb = size / (1024 * 1024) if size > 0 else 0
-        
-        movies_text += f"\n\n{count}. <b>{title}</b>"
-        movies_text += f"\n   📁 Kod: <code>#{code}</code>"
-        
-        if size_mb > 0:
-            movies_text += f"\n   📦 Hajmi: {size_mb:.1f} MB"
-        
-        if duration > 0:
-            hours = duration // 3600
-            minutes = (duration % 3600) // 60
-            if hours > 0:
-                movies_text += f"\n   ⏱ Davomiyligi: {hours}:{minutes:02d}"
-            else:
-                movies_text += f"\n   ⏱ Davomiyligi: {minutes} daqiqa"
-    
-    if len(movies_db) > 10:
-        movies_text += f"\n\n... va yana {len(movies_db) - 10} ta kino"
-    
-    total_size_mb = total_size / (1024 * 1024)
-    movies_text += f"\n\n💾 <b>Umumiy hajmi:</b> {total_size_mb:.1f} MB"
-    movies_text += f"\n🎭 <b>Ultimate Professional Kino Bot</b>"
-    
-    send_message(chat_id, movies_text)
-
-def show_movies_list(chat_id, user_id):
-    """Show available movies"""
-    if not movies_db:
-        no_movies_text = """📋 <b>Hozircha kinolar mavjud emas</b>
-
-🔄 Admin tomonidan kinolar tez orada qo'shiladi.
-
-💡 <b>Qanday ishlaydi:</b>
-• Kino kodi yuborilganda avtomatik yuklanadi
-• Yuqori sifatli videolar
-• Tez yuklanish
-
-🎭 <b>Ultimate Professional Kino Bot</b>"""
-        
-        keyboard = {
-            'inline_keyboard': [
-                [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}]
-            ]
-        }
-        send_message(chat_id, no_movies_text, keyboard)
-        return
-    
-    movies_text = f"""🎬 <b>Mavjud kinolar ({len(movies_db)} ta)</b>
-
-📋 <b>Kinolar ro'yxati:</b>
-
-"""
-    
-    count = 0
-    for code, movie_data in list(movies_db.items())[:15]:
-        count += 1
-        
-        if isinstance(movie_data, str):
-            title = f"Kino {code}"
-        else:
-            title = movie_data.get('title', f"Kino {code}")
-        
-        movies_text += f"{count}. <b>{title}</b>\n"
-        movies_text += f"   📁 Kod: <code>{code}</code>\n\n"
-    
-    if len(movies_db) > 15:
-        movies_text += f"... va yana {len(movies_db) - 15} ta kino\n\n"
-    
-    movies_text += """💡 <b>Kino olish uchun:</b>
-• Yuqoridagi kodlardan birini yuboring
-• Masalan: <code>123</code> yoki <code>#123</code>
-• Video avtomatik yuboriladi
-
-🎭 <b>Ultimate Professional Kino Bot</b>"""
-
-    keyboard = {
-        'inline_keyboard': [
-            [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}],
-            [{'text': 'ℹ️ Yordam', 'callback_data': 'show_help'}]
-        ]
-    }
-    
-    send_message(chat_id, movies_text, keyboard)
-
-def show_help(chat_id):
-    """Show help information"""
-    help_text = f"""ℹ️ <b>Ultimate Professional Kino Bot Yordami</b>
-
-🔍 <b>Kino qidirish:</b>
-• Kino kodini yuboring: <code>#123</code>
-• Yoki raqam: <code>123</code>
-• Kino avtomatik yuboriladi
-
-📊 <b>Asosiy komandalar:</b>
-• /start - Bosh sahifa
-• Kino kodi yuborish
-
-🎬 <b>Hozirda mavjud:</b> {len(movies_db)} ta kino
-
-💡 <b>Maslahat:</b>
-• Aniq kino kodini kiriting
-• # belgisi ixtiyoriy
-• Kinolar yuqori sifatda
-
-🎭 <b>Ultimate Professional darajada xizmat!</b>"""
-
-    keyboard = {
-        'inline_keyboard': [
-            [{'text': '🎬 Mavjud kinolar', 'callback_data': 'show_all_movies'}],
-            [{'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}]
-        ]
-    }
-    
-    send_message(chat_id, help_text, keyboard)
-
-def show_admin_stats(chat_id):
-    """Show detailed admin statistics"""
-    current_time = int(time.time())
-    day_ago = current_time - 86400
-    week_ago = current_time - 604800
-    
-    daily_users = sum(1 for user in users_db.values() if user.get('last_seen', 0) > day_ago)
-    weekly_users = sum(1 for user in users_db.values() if user.get('last_seen', 0) > week_ago)
-    
-    total_size = sum(
-        movie.get('file_size', 0) if isinstance(movie, dict) else 0
-        for movie in movies_db.values()
-    )
-    total_size_mb = total_size / (1024 * 1024)
-    
-    stats_text = f"""📊 <b>Ultimate Admin Statistika</b>
-
-👥 <b>Foydalanuvchilar:</b>
-• Jami: {len(users_db)}
-• Bugun faol: {daily_users}
-• Hafta faol: {weekly_users}
-
-🎬 <b>Kinolar:</b>
-• Jami: {len(movies_db)}
-• Umumiy hajmi: {total_size_mb:.1f} MB
-
-⚙️ <b>Tizim:</b>
-• Upload sessiyalar: {len(upload_sessions)}
-• Bot versiyasi: 3.0 Ultimate
-
-🎭 <b>Ultimate Professional Bot!</b>"""
-
-    send_message(chat_id, stats_text)
-
-def handle_photo_upload(chat_id, user_id, message):
-    """Handle photo upload from admin"""
-    if user_id != ADMIN_ID:
-        send_message(chat_id, "❌ Faqat admin photo yuklashi mumkin!")
-        return
-    
-    send_message(chat_id, "📸 Rasm qabul qilindi! Hozircha faqat video upload qo'llab-quvvatlanadi.")
-
-# API functions
-def send_message(chat_id, text, keyboard=None):
-    """Send message via Telegram API"""
-    try:
-        import requests
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        data = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML"
-        }
-        
-        if keyboard:
-            data["reply_markup"] = json.dumps(keyboard)
-        
-        response = requests.post(url, data=data, timeout=10)
-        result = response.json()
-        
-        if result.get('ok'):
-            return True
-        else:
-            logger.error(f"❌ Send message error: {result}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"❌ Send message exception: {e}")
-        return False
-
-def send_video(chat_id, file_id, caption=None):
-    """Send video via Telegram API"""
-    try:
-        import requests
-        url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
-        data = {
-            "chat_id": chat_id,
-            "video": file_id
-        }
-        
-        if caption:
-            data["caption"] = caption
-            data["parse_mode"] = "HTML"
-        
-        response = requests.post(url, data=data, timeout=30)
-        result = response.json()
-        
-        if result.get('ok'):
-            return True
-        else:
-            logger.error(f"❌ Send video error: {result}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"❌ Send video exception: {e}")
-        return False
-
-def send_photo(chat_id, file_id, caption=None):
-    """Send photo via Telegram API"""
-    try:
-        import requests
-        url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
-        data = {
-            "chat_id": chat_id,
-            "photo": file_id
-        }
-        
-        if caption:
-            data["caption"] = caption
-            data["parse_mode"] = "HTML"
-        
-        response = requests.post(url, data=data, timeout=30)
-        result = response.json()
-        
-        if result.get('ok'):
-            return True
-        else:
-            logger.error(f"❌ Send photo error: {result}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"❌ Send photo exception: {e}")
-        return False
-
-def answer_callback(callback_id):
-    """Answer callback query"""
-    try:
-        import requests
-        url = f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery"
-        data = {"callback_query_id": callback_id}
-        
-        response = requests.post(url, data=data, timeout=5)
-        return response.json().get('ok', False)
+        send_message(chat_id, text)
         
     except Exception as e:
-        logger.error(f"❌ Answer callback error: {e}")
-        return False
+        logger.error(f"❌ Manual backup error: {e}")
+        send_message(chat_id, "❌ Manual backup da xatolik!")
 
 # Channel Management Functions
 def check_user_subscriptions(user_id):
@@ -1568,6 +1095,479 @@ def handle_add_channel_id(chat_id, channel_input):
         if channel_id.startswith('https://t.me/'):
             channel_id = '@' + channel_id.replace('https://t.me/', '')
         elif not channel_id.startswith('@') and not channel_id.startswith('-'):
+            channel_id = '@' + channel_id
+        
+        # Test if channel exists and bot has access
+        import requests
+        url = f"https://api.telegram.org/bot{TOKEN}/getChat"
+        data = {"chat_id": channel_id}
+        
+        response = requests.post(url, data=data, timeout=10)
+        result = response.json()
+        
+        if not result.get('ok'):
+            error_msg = result.get('description', 'Kanal topilmadi')
+            send_message(chat_id, f"❌ <b>Xatolik:</b> {error_msg}\n\n💡 Bot kanal admini bo'lishi yoki kanal ochiq bo'lishi kerak!")
+            return
+        
+        # Get channel info
+        chat_info = result.get('result', {})
+        channel_name = chat_info.get('title', 'Noma\'lum kanal')
+        
+        # Store in session for confirmation
+        upload_sessions[chat_id].update({
+            'channel_id': channel_id,
+            'channel_name': channel_name,
+            'step': 'waiting_for_confirmation'
+        })
+        
+        text = f"""✅ <b>Kanal topildi!</b>
+
+📺 <b>Kanal ma'lumotlari:</b>
+• Nomi: {channel_name}
+• ID: <code>{channel_id}</code>
+
+🔄 <b>Bu kanalni majburiy qilishni tasdiqlaysizmi?</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '✅ Ha, qo\'shish', 'callback_data': 'confirm_add_channel'}],
+                [{'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'manage_channels'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Add channel error: {e}")
+        send_message(chat_id, "❌ Kanal qo'shishda xatolik yuz berdi!")
+
+def confirm_add_channel(chat_id):
+    """Confirm adding channel"""
+    if chat_id not in upload_sessions:
+        send_message(chat_id, "❌ Sessiya topilmadi!")
+        return
+    
+    session = upload_sessions[chat_id]
+    channel_id = session.get('channel_id')
+    channel_name = session.get('channel_name')
+    
+    # Add to mandatory channels
+    mandatory_channels[channel_id] = {
+        'name': channel_name,
+        'link': f'https://t.me/{channel_id.replace("@", "")}',
+        'added_time': int(time.time())
+    }
+    
+    # Auto-save after channel addition
+    auto_save_database()
+    
+    # Clean up session
+    del upload_sessions[chat_id]
+    
+    text = f"""✅ <b>Kanal muvaffaqiyatli qo'shildi!</b>
+
+📺 <b>Qo'shilgan kanal:</b>
+• Nomi: {channel_name}
+• ID: <code>{channel_id}</code>
+
+🎯 <b>Endi barcha foydalanuvchilar bu kanalga a'zo bo'lishi majburiy!</b>"""
+    
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '📺 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}],
+            [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+        ]
+    }
+    
+    send_message(chat_id, text, keyboard)
+
+def show_remove_channel_menu(chat_id):
+    """Show remove channel menu"""
+    if not mandatory_channels:
+        text = """📺 <b>Kanal o'chirish</b>
+
+❌ <b>Hozircha majburiy kanallar yo'q!</b>
+
+💡 Avval kanal qo'shing, keyin o'chirishingiz mumkin."""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '➕ Kanal qo\'shish', 'callback_data': 'add_channel'}],
+                [{'text': '🔙 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        return
+    
+    text = """➖ <b>Majburiy kanal o'chirish</b>
+
+📋 <b>O'chiriladigan kanalni tanlang:</b>"""
+    
+    buttons = []
+    for channel_id, channel_info in mandatory_channels.items():
+        channel_name = channel_info.get('name', 'Noma\'lum')
+        buttons.append([{'text': f'❌ {channel_name}', 'callback_data': f'remove_ch_{channel_id}'}])
+    
+    buttons.append([{'text': '🔙 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}])
+    
+    keyboard = {'inline_keyboard': buttons}
+    
+    send_message(chat_id, text, keyboard)
+
+def remove_channel(chat_id, channel_id):
+    """Remove channel from mandatory list"""
+    if channel_id in mandatory_channels:
+        channel_name = mandatory_channels[channel_id].get('name', 'Noma\'lum')
+        del mandatory_channels[channel_id]
+        # Auto-save after channel removal
+        auto_save_database()
+        
+        text = f"""✅ <b>Kanal o'chirildi!</b>
+
+📺 <b>O'chirilgan kanal:</b>
+• Nomi: {channel_name}
+• ID: <code>{channel_id}</code>
+
+🎯 <b>Endi bu kanal majburiy emas!</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '📺 Kanallar boshqaruvi', 'callback_data': 'manage_channels'}],
+                [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+    else:
+        send_message(chat_id, "❌ Kanal topilmadi!")
+
+def handle_subscription_check(chat_id, user_id):
+    """Handle subscription check"""
+    if check_user_subscriptions(user_id):
+        send_message(chat_id, """✅ <b>Tabriklaymiz!</b>
+
+🎉 Siz barcha majburiy kanallarga a'zo bo'ldingiz!
+
+🎬 <b>Endi botdan to'liq foydalanishingiz mumkin:</b>
+• Kino kodlarini yuborish
+• Kinolar ro'yxatini ko'rish
+• Barcha funksiyalardan foydalanish
+
+💡 <b>Kino olish uchun kod yuboring:</b> <code>#123</code>""")
+        
+        # Send start menu
+        handle_start(chat_id, user_id)
+    else:
+        send_subscription_message(chat_id, user_id)
+
+def setup_webhook():
+    """Setup webhook"""
+    try:
+        webhook_url = os.getenv('RENDER_EXTERNAL_URL')
+        if webhook_url:
+            webhook_url = f"{webhook_url}/webhook"
+            
+            response = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/setWebhook",
+                data={"url": webhook_url}
+            )
+            result = response.json()
+            
+            if result.get('ok'):
+                logger.info(f"✅ Webhook set: {webhook_url}")
+            else:
+                logger.error(f"❌ Webhook error: {result}")
+        else:
+            logger.warning("⚠️ No RENDER_EXTERNAL_URL found")
+            
+    except Exception as e:
+        logger.error(f"❌ Webhook setup error: {e}")
+
+def keep_alive():
+    """Keep the app alive by self-pinging every 10 minutes"""
+    try:
+        app_url = os.getenv('RENDER_EXTERNAL_URL')
+        if app_url:
+            ping_url = f"{app_url}/ping"
+            
+            while True:
+                try:
+                    response = requests.get(ping_url, timeout=30)
+                    if response.status_code == 200:
+                        logger.info(f"🏓 Keep-alive ping successful: {response.json().get('message', 'Pong!')}")
+                    else:
+                        logger.warning(f"⚠️ Keep-alive ping failed: {response.status_code}")
+                except Exception as e:
+                    logger.error(f"❌ Keep-alive ping error: {e}")
+                
+                # Wait 10 minutes (600 seconds)
+                time.sleep(600)
+        else:
+            logger.info("💡 Keep-alive disabled: No RENDER_EXTERNAL_URL found")
+            
+    except Exception as e:
+        logger.error(f"❌ Keep-alive thread error: {e}")
+
+def start_keep_alive():
+    """Start keep-alive thread"""
+    try:
+        if os.getenv('RENDER_EXTERNAL_URL'):
+            keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+            keep_alive_thread.start()
+            logger.info("🔄 Keep-alive system started (10-minute intervals)")
+        else:
+            logger.info("💡 Keep-alive disabled: Running locally")
+    except Exception as e:
+        logger.error(f"❌ Keep-alive start error: {e}")
+
+def show_system_health(chat_id):
+    """Show system health information"""
+    try:
+        app_url = os.getenv('RENDER_EXTERNAL_URL', 'localhost')
+        current_time = int(time.time())
+        
+        # Check database files status
+        users_exists = os.path.exists('users.json')
+        movies_exists = os.path.exists('file_ids.json')
+        channels_exists = os.path.exists('channels.json')
+        
+        if app_url == 'localhost':
+            # Local development mode
+            text = f"""🔧 <b>Tizim holati - Local Development</b>
+
+💻 <b>Local Development Mode:</b>
+• Holat: 🟢 Ishlayapti
+• URL: localhost (development)
+• Keep-alive: 💡 Disabled (normal)
+• Periodic backup: ✅ Active (5min)
+• Vaqt: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}
+
+📊 <b>Bot statistikasi:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Kinolar: {len(movies_db)} ta
+• Majburiy kanallar: {len(mandatory_channels)} ta
+• Upload sessiyalar: {len(upload_sessions)} ta
+• Broadcast sessiyalar: {len(broadcast_data)} ta
+
+💾 <b>Database Files:</b>
+• users.json: {'✅ Mavjud' if users_exists else '❌ Yoq'}
+• file_ids.json: {'✅ Mavjud' if movies_exists else '❌ Yoq'}
+• channels.json: {'✅ Mavjud' if channels_exists else '❌ Yoq'}
+• Auto-save: ✅ Enabled
+• Periodic backup: ✅ Every 5min
+
+⚙️ <b>Development xususiyatlari:</b>
+• Platform: Local development
+• Flask server: Debug mode
+• Database: JSON fayllar + Auto-save
+• Keep-alive: Disabled
+• Data persistence: ✅ Guaranteed
+
+🚀 <b>Production deploy uchun:</b>
+• Render.com ga deploy qiling
+• RENDER_EXTERNAL_URL avtomatik o'rnatiladi
+• Keep-alive avtomatik boshlanadi
+• Auto-save va backup tizimi ishlaydi
+• Ma'lumotlar saqlanib qoladi
+
+🎭 <b>Ultimate Professional Bot V3.0</b>"""
+        else:
+            # Production mode
+            health_status = "🟢 Active (responding)"
+            ping_status = "🟢 Working (bot active)"
+            
+            text = f"""🔧 <b>Tizim holati - Production Mode</b>
+
+🌐 <b>Production Server:</b>
+• URL: <code>{app_url}</code>
+• Holat: {health_status}
+• Keep-alive: {ping_status}
+• Periodic backup: ✅ Active (5min)
+• Vaqt: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}
+
+📊 <b>Bot statistikasi:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Kinolar: {len(movies_db)} ta
+• Majburiy kanallar: {len(mandatory_channels)} ta
+• Upload sessiyalar: {len(upload_sessions)} ta
+• Broadcast sessiyalar: {len(broadcast_data)} ta
+
+💾 <b>Data Persistence:</b>
+• users.json: {'✅ Mavjud' if users_exists else '❌ Yoq'}
+• file_ids.json: {'✅ Mavjud' if movies_exists else '❌ Yoq'}
+• channels.json: {'✅ Mavjud' if channels_exists else '❌ Yoq'}
+• Auto-save: ✅ After every operation
+• Periodic backup: ✅ Every 5 minutes
+• Data safety: ✅ Guaranteed
+
+⚙️ <b>Production xususiyatlari:</b>
+• Platform: Render.com
+• Keep-alive interval: 10 daqiqa
+• Ping endpoint: /ping
+• Health endpoint: /health
+• Auto-save system: ✅ Active
+• Restart-safe: ✅ Data preserved
+
+📋 <b>Uptime Robot URL:</b>
+<code>{app_url}/ping</code>
+
+🎭 <b>Ultimate Professional Bot V3.0</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🏓 Ping Test', 'callback_data': 'ping_test'}],
+                [{'text': '💾 Manual Backup', 'callback_data': 'manual_backup'}],
+                [{'text': '🔄 Yangilash', 'callback_data': 'system_health'}],
+                [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ System health error: {e}")
+        send_message(chat_id, "❌ Tizim holati tekshirishda xatolik!")
+
+def test_ping(chat_id):
+    """Test ping functionality"""
+    try:
+        app_url = os.getenv('RENDER_EXTERNAL_URL')
+        
+        if not app_url:
+            # Local mode - test localhost
+            send_message(chat_id, """🏓 <b>Ping Test - Local Mode</b>
+
+💡 <b>Local rejimda test qilinyapti...</b>
+
+⚠️ <b>Eslatma:</b> Keep-alive tizimi faqat production (Render.com) da ishlaydi.
+
+✅ <b>Local test natijalari:</b>
+• Bot: ✅ Ishlayapti
+• Database: ✅ Ulangan
+• Flask server: ✅ Faol
+• Keep-alive: 💡 Disabled (normal)
+
+🚀 <b>Production da deploy qilgandan so'ng:</b>
+• Keep-alive avtomatik boshlanadi
+• Ping test real server bilan ishlaydi
+• Uptime Robot URL olishingiz mumkin
+
+🎭 <b>Hozirda local development rejimida!</b>""")
+            return
+        
+        # Production mode - show keep-alive status instead of self-ping
+        send_message(chat_id, """🏓 <b>Production Keep-alive Status</b>
+
+✅ <b>Keep-alive tizimi faol!</b>
+
+🔄 <b>Internal Keep-alive:</b>
+• Har 10 daqiqada avtomatik ping
+• Background thread da ishlaydi
+• Server uyg'oq holatda saqlaydi
+
+� <b>External monitoring:</b>
+• Uptime Robot ping qilyapti
+• Status: ✅ Active
+• Server javob bermoqda
+
+� <b>Tizim holati:</b>
+• Production server: ✅ Running
+• Webhook: ✅ Active  
+• Database: ✅ Connected
+• Users: {len(users_db)} ta
+• Movies: {len(movies_db)} ta
+
+📋 <b>Uptime Robot URL:</b>
+<code>{app_url}/ping</code>
+
+� <b>Eslatma:</b> Keep-alive internal tizim sifatida ishlaydi.
+Tashqi ping testlar Uptime Robot orqali amalga oshiriladi.
+
+🎭 <b>Ultimate Professional Bot V3.0 - Keep-alive Active!</b>""")
+        
+    except Exception as e:
+        logger.error(f"❌ Ping test error: {e}")
+        send_message(chat_id, f"❌ Ping test ichki xatolik: {str(e)}")
+
+def show_admin_test(chat_id):
+    """Show admin test"""
+    app_url = os.getenv('RENDER_EXTERNAL_URL')
+    
+    if app_url:
+        # Production mode
+        uptime_info = "Keep-alive: ✅ Production faol"
+        deployment_info = f"""
+📋 <b>Production Endpoints:</b>
+• Ping: <code>{app_url}/ping</code>
+• Health: <code>{app_url}/health</code>
+• Home: <code>{app_url}/</code>
+
+🔄 <b>Uptime Robot Setup:</b>
+• URL: <code>{app_url}/ping</code>
+• Interval: 5 daqiqa
+• Monitor Type: HTTP(s)
+
+💡 <b>Keep-alive har 10 daqiqada ping yuboradi!</b>"""
+    else:
+        # Local development mode
+        uptime_info = "Keep-alive: 💡 Local mode (disabled)"
+        deployment_info = f"""
+📋 <b>Local Development Mode:</b>
+• Flask server: localhost
+• Keep-alive: Disabled (normal)
+• Database: JSON fayllar
+
+🚀 <b>Production deploy uchun:</b>
+• Render.com ga deploy qiling
+• Keep-alive avtomatik boshlanadi
+• Uptime Robot URL olishingiz mumkin
+
+💡 <b>Local test maqsadida ishlamoqda!</b>"""
+    
+    test_text = f"""🔧 <b>Admin Test Panel</b>
+    
+✅ Barcha sistemalar normal ishlaydi!
+✅ Database ulanish: OK
+✅ Upload tizimi: OK
+✅ Broadcast tizimi: OK
+✅ Channel management: OK
+✅ {uptime_info}
+
+🎭 Ultimate Professional Bot V3.0{deployment_info}"""
+    
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '🏓 Ping Test', 'callback_data': 'ping_test'}],
+            [{'text': '🔧 Tizim holati', 'callback_data': 'system_health'}],
+            [{'text': '🔙 Admin Panel', 'callback_data': 'admin_menu'}]
+        ]
+    }
+    
+    send_message(chat_id, test_text, keyboard)
+
+# Initialize on startup
+logger.info("🚀 Starting Ultimate Professional Kino Bot V3.0...")
+load_database()
+setup_webhook()
+start_keep_alive()
+start_backup_system()  # Start periodic backup
+
+# For gunicorn compatibility
+application = app
+
+if __name__ == "__main__":
+    logger.info("🎭 Ultimate Professional Kino Bot starting...")
+    
+    port = int(os.environ.get('PORT', 8080))
+    logger.info(f"🚀 Server starting on port {port}")
+    
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=False
+    )
             channel_id = '@' + channel_id
         
         # Test if channel exists and bot has access

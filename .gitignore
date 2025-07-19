@@ -1,22 +1,22 @@
 # Environment variables
 .env
 
-# Python cache files
+# Python cache
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+*.pyo
 
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
+# IDE files
+.vscode/
+.idea/
 
-# Virtual environments
-venv/
-env/
-ENV/
+# Local development
+*.log
 
-# IDE specific files
+# Keep JSON databases in version control for Render deployment
+# users.json
+# file_ids.json  
+# channels.json
 .idea/
 .vscode/
 *.swp
