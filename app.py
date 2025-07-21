@@ -107,6 +107,60 @@ def save_database():
     """Save all databases - replaced with auto_save_database"""
     return auto_save_database()
 
+# Telegram API functions
+def send_message(chat_id, text, keyboard=None):
+    """Send message to Telegram chat"""
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        data = {
+            'chat_id': chat_id,
+            'text': text,
+            'parse_mode': 'HTML'
+        }
+        
+        if keyboard:
+            data['reply_markup'] = json.dumps(keyboard)
+        
+        response = requests.post(url, data=data, timeout=10)
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Message sent to {chat_id}")
+            return response.json()
+        else:
+            logger.error(f"❌ Failed to send message: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"❌ Send message error: {e}")
+        return None
+
+def send_video(chat_id, video_file_id, caption="", keyboard=None):
+    """Send video to Telegram chat"""
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
+        data = {
+            'chat_id': chat_id,
+            'video': video_file_id,
+            'caption': caption,
+            'parse_mode': 'HTML'
+        }
+        
+        if keyboard:
+            data['reply_markup'] = json.dumps(keyboard)
+        
+        response = requests.post(url, data=data, timeout=30)
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Video sent to {chat_id}")
+            return response.json()
+        else:
+            logger.error(f"❌ Failed to send video: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"❌ Send video error: {e}")
+        return None
+
 # Add periodic backup system
 def periodic_backup():
     """Backup database every 5 minutes"""
