@@ -203,6 +203,15 @@ def handle_start(chat_id, user_id):
 • Kino kodi yuboring: <code>123</code>
 
 🎭 <b>Bot ish holatida!</b>"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '📊 Statistika', 'callback_data': 'admin_stats'}],
+                    [{'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}],
+                    [{'text': '📣 Reklama', 'callback_data': 'broadcast'}],
+                    [{'text': '🎬 Kino joylash', 'callback_data': 'upload_movie'}]
+                ]
+            }
         else:
             text = f"""🎬 <b>Kino Bot ga xush kelibsiz!</b>
 
@@ -213,8 +222,23 @@ def handle_start(chat_id, user_id):
 📊 <b>Mavjud:</b> {len(movies_db)} ta kino
 
 🚀 <b>Hoziroq kod yuboring!</b>"""
+
+            # Get available movie codes for regular users
+            available_codes = list(movies_db.keys())[:8]  # First 8 codes
+            if available_codes:
+                keyboard = {'inline_keyboard': []}
+                # Add movie codes as buttons, 2 per row
+                for i in range(0, len(available_codes), 2):
+                    row = []
+                    for j in range(2):
+                        if i + j < len(available_codes):
+                            code = available_codes[i + j]
+                            row.append({'text': f'🎬 {code}', 'callback_data': f'movie_{code}'})
+                    keyboard['inline_keyboard'].append(row)
+            else:
+                keyboard = None
         
-        send_message(chat_id, text)
+        send_message(chat_id, text, keyboard)
         logger.info(f"✅ Start sent to {user_id}")
         
     except Exception as e:
@@ -267,7 +291,15 @@ def handle_stats(chat_id, user_id):
 ⏰ <b>Vaqt:</b> {time.strftime('%Y-%m-%d %H:%M:%S')}
 🤖 <b>Status:</b> ✅ Ishlayapti"""
         
-        send_message(chat_id, text)
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}],
+                [{'text': '🔄 Yangilash', 'callback_data': 'admin_stats'}],
+                [{'text': '🔙 Bosh sahifa', 'callback_data': 'back_to_start'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
         
     except Exception as e:
         logger.error(f"❌ Stats error: {e}")
@@ -351,7 +383,7 @@ def handle_movie_request(chat_id, user_id, text):
         send_message(chat_id, "❌ Xatolik yuz berdi!")
 
 def handle_callback(callback_query):
-    """Handle callback queries (if needed)"""
+    """Handle callback queries"""
     try:
         chat_id = callback_query.get('message', {}).get('chat', {}).get('id')
         user_id = callback_query.get('from', {}).get('id')
@@ -361,11 +393,96 @@ def handle_callback(callback_query):
         callback_id = callback_query.get('id')
         answer_callback(callback_id)
         
-        # Handle specific callbacks here if needed
         logger.info(f"🔘 Callback: {data} from {user_id}")
+        
+        # Handle different callbacks
+        if data == 'admin_stats':
+            if user_id == ADMIN_ID:
+                handle_stats(chat_id, user_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data == 'list_users':
+            if user_id == ADMIN_ID:
+                show_users_list(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data == 'broadcast':
+            if user_id == ADMIN_ID:
+                send_message(chat_id, """📣 <b>Reklama yuborish</b>
+
+📝 Reklama matnini yuboring:""")
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data == 'upload_movie':
+            if user_id == ADMIN_ID:
+                send_message(chat_id, """🎬 <b>Kino yuklash</b>
+
+📹 Video faylni yuboring:""")
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data.startswith('movie_'):
+            # User clicked on movie code button
+            code = data.replace('movie_', '')
+            handle_movie_request(chat_id, user_id, code)
+            
+        elif data == 'back_to_start':
+            # Go back to start menu
+            handle_start(chat_id, user_id)
+            
+        else:
+            send_message(chat_id, f"❓ Noma'lum komanda: {data}")
         
     except Exception as e:
         logger.error(f"❌ Callback error: {e}")
+
+def show_users_list(chat_id):
+    """Show users list for admin"""
+    try:
+        if not users_db:
+            send_message(chat_id, "👥 <b>Foydalanuvchilar ro'yxati bo'sh!</b>")
+            return
+            
+        text = f"� <b>Foydalanuvchilar ({len(users_db)} ta)</b>\n\n"
+        
+        count = 1
+        for user_id, user_info in list(users_db.items())[:10]:  # First 10 users
+            name = user_info.get('first_name', 'Noma\'lum')
+            last_seen = user_info.get('last_seen', 0)
+            
+            if last_seen > 0:
+                time_diff = int(time.time()) - last_seen
+                if time_diff < 3600:  # Less than 1 hour
+                    status = "🟢 Faol"
+                elif time_diff < 86400:  # Less than 1 day  
+                    status = "🟡 Bugun"
+                else:
+                    status = "🔴 Eski"
+            else:
+                status = "❓ Noma'lum"
+                
+            text += f"{count}. {name} - {status}\n"
+            text += f"   ID: <code>{user_id}</code>\n\n"
+            count += 1
+            
+        if len(users_db) > 10:
+            text += f"... va yana {len(users_db) - 10} foydalanuvchi"
+            
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🔄 Yangilash', 'callback_data': 'list_users'}],
+                [{'text': '🔙 Orqaga', 'callback_data': 'back_to_start'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Show users error: {e}")
+        send_message(chat_id, "❌ Foydalanuvchilar ro'yxatini olishda xatolik!")
 
 def answer_callback(callback_id):
     """Answer callback query"""
