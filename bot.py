@@ -233,6 +233,27 @@ async def handle_admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"❌ Admin button handler error: {e}")
 
+async def handle_combined_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all text messages (admin buttons, movie codes, admin inputs)"""
+    try:
+        text = update.message.text
+        user_id = update.effective_user.id
+        logger.info(f"📝 Message from {user_id}: {text}")
+        
+        # Check if this is an admin button
+        if user_id == ADMIN_ID:
+            admin_buttons = ["📊 Statistika", "👥 Foydalanuvchilar", "📣 Reklama", "🎬 Kino joylash", "🔙 Orqaga"]
+            
+            if text in admin_buttons:
+                await handle_admin_buttons(update, context)
+                return
+        
+        # Handle regular messages and admin inputs
+        await handle_message(update, context)
+        
+    except Exception as e:
+        logger.error(f"❌ Message handling error: {e}")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages (movie codes, admin inputs)"""
     try:
@@ -525,14 +546,8 @@ def main():
         app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
         app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
         
-        # Admin keyboard buttons handler (admin faqat)
-        app.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.User(user_id=ADMIN_ID), 
-            handle_admin_buttons
-        ))
-        
-        # Regular message handler (all users)
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        # Combined message handler (handles both admin and regular messages)
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_combined_message))
         app.add_error_handler(error_handler)
         
         print("✅ Handlers qo'shildi")
