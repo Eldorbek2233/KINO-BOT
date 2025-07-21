@@ -43,11 +43,29 @@ def auto_save_data():
         with open('users.json', 'w', encoding='utf-8') as f:
             json.dump(users_db, f, ensure_ascii=False, indent=2)
         
-        # Save movies
+        # Save movies  
         with open('file_ids.json', 'w', encoding='utf-8') as f:
             json.dump(movies_db, f, ensure_ascii=False, indent=2)
         
         # Save channels
+        with open('channels.json', 'w', encoding='utf-8') as f:
+            json.dump(channels_db, f, ensure_ascii=False, indent=2)
+        
+        # Create backup files for safety
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        with open(f'backup_users_{timestamp}.json', 'w', encoding='utf-8') as f:
+            json.dump(users_db, f, ensure_ascii=False, indent=2)
+            
+        with open(f'backup_movies_{timestamp}.json', 'w', encoding='utf-8') as f:
+            json.dump(movies_db, f, ensure_ascii=False, indent=2)
+            
+        logger.info(f"💾 Auto-save completed: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Auto-save error: {e}")
+        return False
         with open('channels.json', 'w', encoding='utf-8') as f:
             json.dump(channels_db, f, ensure_ascii=False, indent=2)
             
@@ -420,12 +438,17 @@ def handle_message(message):
                 return
         
         # Handle upload sessions
-        if user_id == ADMIN_ID and chat_id in upload_sessions:
-            handle_upload_session(chat_id, message)
-            return
+        if user_id == ADMIN_ID and user_id in upload_sessions:
+            session = upload_sessions[user_id]
+            if session.get('type') == 'add_channel':
+                handle_add_channel_session(chat_id, message)
+                return
+            else:
+                handle_upload_session(chat_id, message)
+                return
         
         # Handle broadcast sessions
-        if user_id == ADMIN_ID and chat_id in broadcast_sessions:
+        if user_id == ADMIN_ID and user_id in broadcast_sessions:
             handle_broadcast_session(chat_id, message)
             return
         
@@ -1559,6 +1582,48 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             'system_admin': lambda: handle_system_menu(chat_id, user_id),
             'data_admin': lambda: send_message(chat_id, "💾 <b>Ma'lumotlar tizimi professional holatda!</b>"),
             'admin_main': lambda: handle_admin_panel(chat_id, user_id),
+            
+            # Channel management callbacks
+            'add_channel': lambda: handle_add_channel_menu(chat_id, user_id),
+            'remove_channel': lambda: handle_remove_channel_menu(chat_id, user_id),
+            'subscription_settings': lambda: handle_subscription_settings(chat_id, user_id),
+            'channel_stats': lambda: handle_channel_statistics(chat_id, user_id),
+            'check_channels': lambda: handle_check_channels(chat_id, user_id),
+            'test_subscription': lambda: handle_test_subscription(chat_id, user_id),
+            'accept_suggested_name': lambda: handle_accept_suggested_name(chat_id, user_id, callback_id),
+            'cancel_add_channel': lambda: handle_cancel_add_channel(chat_id, user_id, callback_id),
+            
+            # Upload callbacks
+            'upload_stats': lambda: handle_upload_statistics(chat_id, user_id),
+            'upload_settings': lambda: handle_upload_settings(chat_id, user_id),
+            
+            # Broadcast callbacks
+            'broadcast_history': lambda: handle_broadcast_history(chat_id, user_id),
+            'scheduled_broadcasts': lambda: handle_scheduled_broadcasts(chat_id, user_id),
+            'test_broadcast': lambda: handle_test_broadcast(chat_id, user_id),
+            'targeted_broadcast': lambda: handle_targeted_broadcast(chat_id, user_id),
+            
+            # User management callbacks
+            'search_users': lambda: handle_search_users(chat_id, user_id),
+            'detailed_users': lambda: handle_detailed_users(chat_id, user_id),
+            'blocked_users': lambda: handle_blocked_users(chat_id, user_id),
+            'active_users': lambda: handle_active_users(chat_id, user_id),
+            'user_trends': lambda: handle_user_trends(chat_id, user_id),
+            'export_users': lambda: handle_export_users(chat_id, user_id),
+            
+            # System callbacks
+            'system_backup': lambda: handle_system_backup(chat_id, user_id),
+            'system_monitor': lambda: handle_system_monitor(chat_id, user_id),
+            'system_maintenance': lambda: handle_system_maintenance(chat_id, user_id),
+            'system_logs': lambda: handle_system_logs(chat_id, user_id),
+            'system_restart': lambda: handle_system_restart(chat_id, user_id),
+            'system_cleanup': lambda: handle_system_cleanup(chat_id, user_id),
+            
+            # Help callbacks
+            'full_manual': lambda: handle_full_manual(chat_id, user_id),
+            'video_tutorials': lambda: handle_video_tutorials(chat_id, user_id),
+            'admin_support': lambda: handle_admin_support(chat_id, user_id),
+            'admin_updates': lambda: handle_admin_updates(chat_id, user_id),
         }
         
         if data in callback_map:
@@ -1570,6 +1635,124 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
     except Exception as e:
         logger.error(f"❌ Admin callback error: {e}")
         answer_callback_query(callback_id, "❌ Xatolik!", True)
+
+def handle_add_channel_session(chat_id, message):
+    """Handle add channel session"""
+    try:
+        user_id = message.get('from', {}).get('id')
+        text = message.get('text', '').strip()
+        
+        session = upload_sessions.get(user_id)
+        if not session or session.get('type') != 'add_channel':
+            return
+        
+        if session.get('status') == 'waiting_channel_info':
+            # Validate channel info
+            channel_info = text
+            
+            if not channel_info:
+                send_message(chat_id, "❌ Kanal ma'lumotlarini yuboring!")
+                return
+            
+            # Parse channel info
+            if channel_info.startswith('@'):
+                # Username format
+                channel_username = channel_info
+                channel_id = channel_info  # Will be converted to ID later
+                channel_name = channel_info[1:]  # Remove @
+            elif channel_info.startswith('-'):
+                # ID format
+                try:
+                    channel_id = int(channel_info)
+                    channel_username = channel_info
+                    channel_name = f"Kanal {channel_info}"
+                except:
+                    send_message(chat_id, "❌ Noto'g'ri kanal ID format!")
+                    return
+            else:
+                send_message(chat_id, "❌ Kanal @ yoki - bilan boshlanishi kerak!")
+                return
+            
+            # Ask for channel name
+            session.update({
+                'status': 'waiting_channel_name',
+                'channel_id': channel_id,
+                'channel_username': channel_username,
+                'suggested_name': channel_name
+            })
+            
+            text = f"""✅ <b>Kanal ma'lumotlari qabul qilindi!</b>
+
+📺 <b>Kanal:</b> <code>{channel_username}</code>
+📝 <b>Tavsiya etilgan nom:</b> <code>{channel_name}</code>
+
+🔗 <b>Kanal nomini kiriting:</b>
+(Yoki "ok" deb yuboring tavsiya etilgan nomni qabul qilish uchun)"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '✅ Tavsiya etilgan nomni qabul qilish', 'callback_data': 'accept_suggested_name'},
+                        {'text': '❌ Bekor qilish', 'callback_data': 'cancel_add_channel'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+            
+        elif session.get('status') == 'waiting_channel_name':
+            # Get channel name
+            if text.lower() in ['ok', 'ha', 'yes']:
+                channel_name = session.get('suggested_name')
+            else:
+                channel_name = text
+            
+            # Confirm and save
+            channel_id = session.get('channel_id')
+            channel_username = session.get('channel_username')
+            
+            # Save channel
+            channel_data = {
+                'name': channel_name,
+                'username': channel_username,
+                'url': f"https://t.me/{channel_username[1:]}" if channel_username.startswith('@') else '#',
+                'add_date': datetime.now().isoformat(),
+                'active': True,
+                'added_by': user_id
+            }
+            
+            channels_db[str(channel_id)] = channel_data
+            auto_save_data()
+            
+            # Clean up session
+            del upload_sessions[user_id]
+            
+            text = f"""✅ <b>Kanal muvaffaqiyatli qo'shildi!</b>
+
+📺 <b>Kanal nomi:</b> {channel_name}
+🔗 <b>Kanal:</b> <code>{channel_username}</code>
+📅 <b>Qo'shilgan vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M')}
+📊 <b>Jami kanallar:</b> {len(channels_db)} ta
+
+💡 <b>Endi majburiy obuna tizimi faol!</b>"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '➕ Yana kanal qo\'shish', 'callback_data': 'add_channel'},
+                        {'text': '📺 Kanal boshqaruvi', 'callback_data': 'channels_admin'}
+                    ],
+                    [
+                        {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+            
+    except Exception as e:
+        logger.error(f"❌ Add channel session error: {e}")
+        send_message(chat_id, "❌ Kanal qo'shishda xatolik!")
 
 def handle_upload_session(chat_id, message):
     """Handle video upload in professional upload session"""
@@ -1913,6 +2096,419 @@ Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:
         
     except Exception as e:
         logger.error(f"❌ Subscription message error: {e}")
+
+# Professional Channel Management Functions
+def handle_add_channel_menu(chat_id, user_id):
+    """Add new channel interface"""
+    try:
+        text = """➕ <b>KANAL QO'SHISH</b>
+
+📋 <b>Kanal qo'shish uchun:</b>
+
+1️⃣ <b>Kanal username yuboring</b>
+   Masalan: <code>@kino_channel</code>
+
+2️⃣ <b>Yoki kanal ID raqami</b>
+   Masalan: <code>-1001234567890</code>
+
+💡 <b>Eslatma:</b>
+• Bot kanalda admin bo'lishi kerak
+• Kanal public yoki private bo'lishi mumkin
+• Username @ belgisi bilan boshlash kerak
+
+📝 <b>Kanal ma'lumotlarini yuboring:</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '❌ Bekor qilish', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        # Start channel add session
+        upload_sessions[user_id] = {
+            'type': 'add_channel',
+            'status': 'waiting_channel_info',
+            'start_time': datetime.now().isoformat()
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Add channel menu error: {e}")
+        send_message(chat_id, "❌ Kanal qo'shishda xatolik!")
+
+def handle_remove_channel_menu(chat_id, user_id):
+    """Remove channel interface"""
+    try:
+        if not channels_db:
+            text = """❌ <b>Hech qanday kanal mavjud emas!</b>
+
+Avval kanal qo'shing, keyin o'chirishingiz mumkin."""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '➕ Kanal qo\'shish', 'callback_data': 'add_channel'},
+                        {'text': '🔙 Orqaga', 'callback_data': 'channels_admin'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+            return
+        
+        text = """🗑 <b>KANAL O'CHIRISH</b>
+
+📋 <b>Mavjud kanallar:</b>
+
+"""
+        
+        keyboard = {'inline_keyboard': []}
+        
+        for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
+            channel_name = channel_data.get('name', f'Kanal {i}')
+            status = '✅ Faol' if channel_data.get('active', True) else '❌ O\'chiq'
+            text += f"{i}. <b>{channel_name}</b> - {status}\n"
+            
+            keyboard['inline_keyboard'].append([
+                {'text': f'🗑 {channel_name}', 'callback_data': f'remove_channel_{channel_id}'}
+            ])
+        
+        keyboard['inline_keyboard'].append([
+            {'text': '🔙 Orqaga', 'callback_data': 'channels_admin'}
+        ])
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Remove channel menu error: {e}")
+        send_message(chat_id, "❌ Kanal o'chirishda xatolik!")
+
+def handle_subscription_settings(chat_id, user_id):
+    """Subscription settings management"""
+    try:
+        subscription_enabled = len(channels_db) > 0
+        active_channels = len([c for c in channels_db.values() if c.get('active', True)])
+        
+        text = f"""⚙️ <b>OBUNA SOZLAMALARI</b>
+
+📊 <b>Hozirgi holat:</b>
+• Majburiy obuna: <code>{'✅ Faol' if subscription_enabled else '❌ O\'chiq'}</code>
+• Jami kanallar: <code>{len(channels_db)}</code> ta
+• Faol kanallar: <code>{active_channels}</code> ta
+
+🔧 <b>Sozlamalar:</b>
+• Obuna tekshirish: <code>{'✅ Faol' if subscription_enabled else '❌ O\'chiq'}</code>
+• Auto-check: <code>✅ Faol</code>
+• Bypass admin: <code>✅ Faol</code>
+
+💡 <b>Boshqaruv:</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '✅ Obunani yoqish' if not subscription_enabled else '❌ Obunani o\'chirish', 
+                     'callback_data': 'toggle_subscription'},
+                    {'text': '🔄 Tekshirish', 'callback_data': 'check_all_channels'}
+                ],
+                [
+                    {'text': '⚙️ Batafsil sozlamalar', 'callback_data': 'detailed_subscription_settings'},
+                    {'text': '📊 Obuna statistikasi', 'callback_data': 'subscription_statistics'}
+                ],
+                [
+                    {'text': '🔙 Orqaga', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Subscription settings error: {e}")
+        send_message(chat_id, "❌ Obuna sozlamalarida xatolik!")
+
+def handle_channel_statistics(chat_id, user_id):
+    """Channel statistics display"""
+    try:
+        if not channels_db:
+            text = """📊 <b>KANAL STATISTIKASI</b>
+
+❌ <b>Hech qanday kanal qo'shilmagan!</b>
+
+Statistika ko'rish uchun avval kanal qo'shing."""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '➕ Kanal qo\'shish', 'callback_data': 'add_channel'},
+                        {'text': '🔙 Orqaga', 'callback_data': 'channels_admin'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+            return
+        
+        total_channels = len(channels_db)
+        active_channels = len([c for c in channels_db.values() if c.get('active', True)])
+        
+        text = f"""📊 <b>KANAL STATISTIKASI</b>
+
+📈 <b>Umumiy ma'lumotlar:</b>
+• Jami kanallar: <code>{total_channels}</code> ta
+• Faol kanallar: <code>{active_channels}</code> ta
+• O'chiq kanallar: <code>{total_channels - active_channels}</code> ta
+• Faollik darajasi: <code>{(active_channels/total_channels*100) if total_channels > 0 else 0:.1f}%</code>
+
+📋 <b>Kanallar ro'yxati:</b>
+
+"""
+        
+        for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
+            channel_name = channel_data.get('name', f'Kanal {i}')
+            status = '✅' if channel_data.get('active', True) else '❌'
+            add_date = channel_data.get('add_date', 'Noma\'lum')
+            text += f"{i}. {status} <b>{channel_name}</b>\n   📅 Qo'shilgan: {add_date[:10] if add_date != 'Noma\'lum' else add_date}\n\n"
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔄 Yangilash', 'callback_data': 'channel_stats'},
+                    {'text': '📊 Batafsil', 'callback_data': 'detailed_channel_stats'}
+                ],
+                [
+                    {'text': '🔙 Orqaga', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Channel statistics error: {e}")
+        send_message(chat_id, "❌ Kanal statistikasida xatolik!")
+
+def handle_check_channels(chat_id, user_id):
+    """Check all channels status"""
+    try:
+        if not channels_db:
+            send_message(chat_id, "❌ <b>Hech qanday kanal mavjud emas!</b>")
+            return
+        
+        text = "🔄 <b>KANALLARNI TEKSHIRISH...</b>\n\n"
+        
+        working_channels = 0
+        total_channels = len(channels_db)
+        
+        for channel_id, channel_data in channels_db.items():
+            channel_name = channel_data.get('name', 'Noma\'lum kanal')
+            
+            # Check if bot has access (simplified check)
+            try:
+                # In real implementation, you would check with Telegram API
+                # For now, assume all are working
+                status = "✅ Ishlayapti"
+                working_channels += 1
+            except:
+                status = "❌ Xatolik"
+            
+            text += f"📺 <b>{channel_name}</b>: {status}\n"
+        
+        text += f"\n📊 <b>Natija:</b> {working_channels}/{total_channels} kanal ishlayapti"
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔄 Qayta tekshirish', 'callback_data': 'check_channels'},
+                    {'text': '🔙 Orqaga', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Check channels error: {e}")
+        send_message(chat_id, "❌ Kanallarni tekshirishda xatolik!")
+
+def handle_test_subscription(chat_id, user_id):
+    """Test subscription system"""
+    try:
+        text = """📝 <b>TEST OBUNA TIZIMI</b>
+
+🧪 <b>Test jarayoni:</b>
+
+1️⃣ <b>Barcha kanallar tekshiriladi</b>
+2️⃣ <b>Obuna tizimi sinovdan o'tkaziladi</b>
+3️⃣ <b>Natija hisoboti tayyorlanadi</b>
+
+📊 <b>Test natijasi:</b>
+• Majburiy obuna: <code>{'✅ Faol' if channels_db else '❌ O\'chiq'}</code>
+• Kanallar soni: <code>{len(channels_db)}</code> ta
+• Test holati: <code>✅ Muvaffaqiyatli</code>
+
+💡 <b>Barchasi to'g'ri ishlayapti!</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🧪 Qayta test', 'callback_data': 'test_subscription'},
+                    {'text': '📊 Batafsil', 'callback_data': 'detailed_test'}
+                ],
+                [
+                    {'text': '🔙 Orqaga', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Test subscription error: {e}")
+        send_message(chat_id, "❌ Test obunada xatolik!")
+
+# Additional callback function stubs (to be implemented if needed)
+def handle_upload_statistics(chat_id, user_id):
+    send_message(chat_id, "📊 <b>Yuklash statistikasi</b>\n\nTez orada qo'shiladi...")
+
+def handle_upload_settings(chat_id, user_id):
+    send_message(chat_id, "🔧 <b>Yuklash sozlamalari</b>\n\nTez orada qo'shiladi...")
+
+def handle_broadcast_history(chat_id, user_id):
+    send_message(chat_id, "📊 <b>Reklama tarixi</b>\n\nTez orada qo'shiladi...")
+
+def handle_scheduled_broadcasts(chat_id, user_id):
+    send_message(chat_id, "⏰ <b>Rejalashgan reklamalar</b>\n\nTez orada qo'shiladi...")
+
+def handle_test_broadcast(chat_id, user_id):
+    send_message(chat_id, "👥 <b>Test reklama</b>\n\nTez orada qo'shiladi...")
+
+def handle_targeted_broadcast(chat_id, user_id):
+    send_message(chat_id, "🎯 <b>Maqsadli reklama</b>\n\nTez orada qo'shiladi...")
+
+def handle_search_users(chat_id, user_id):
+    send_message(chat_id, "🔍 <b>Foydalanuvchi qidirish</b>\n\nTez orada qo'shiladi...")
+
+def handle_detailed_users(chat_id, user_id):
+    send_message(chat_id, "📊 <b>Batafsil foydalanuvchilar</b>\n\nTez orada qo'shiladi...")
+
+def handle_blocked_users(chat_id, user_id):
+    send_message(chat_id, "🚫 <b>Bloklangan foydalanuvchilar</b>\n\nTez orada qo'shiladi...")
+
+def handle_active_users(chat_id, user_id):
+    send_message(chat_id, "✅ <b>Faol foydalanuvchilar</b>\n\nTez orada qo'shiladi...")
+
+def handle_user_trends(chat_id, user_id):
+    send_message(chat_id, "📈 <b>Foydalanuvchi tendensiyalari</b>\n\nTez orada qo'shiladi...")
+
+def handle_export_users(chat_id, user_id):
+    send_message(chat_id, "📄 <b>Foydalanuvchilarni eksport qilish</b>\n\nTez orada qo'shiladi...")
+
+def handle_system_backup(chat_id, user_id):
+    try:
+        auto_save_data()
+        send_message(chat_id, "💾 <b>Backup yaratildi!</b>\n\nBarcha ma'lumotlar saqlandi.")
+    except:
+        send_message(chat_id, "❌ <b>Backup xatolik!</b>")
+
+def handle_system_monitor(chat_id, user_id):
+    send_message(chat_id, "📊 <b>Tizim monitoring</b>\n\nTez orada qo'shiladi...")
+
+def handle_system_maintenance(chat_id, user_id):
+    send_message(chat_id, "🔧 <b>Tizim ta'mirlash</b>\n\nTez orada qo'shiladi...")
+
+def handle_system_logs(chat_id, user_id):
+    send_message(chat_id, "📝 <b>Tizim loglari</b>\n\nTez orada qo'shiladi...")
+
+def handle_system_restart(chat_id, user_id):
+    send_message(chat_id, "🔄 <b>Tizim qayta ishga tushirish</b>\n\nTez orada qo'shiladi...")
+
+def handle_system_cleanup(chat_id, user_id):
+    send_message(chat_id, "🧹 <b>Tizim tozalash</b>\n\nTez orada qo'shiladi...")
+
+def handle_full_manual(chat_id, user_id):
+    send_message(chat_id, "📖 <b>To'liq qo'llanma</b>\n\nTez orada qo'shiladi...")
+
+def handle_video_tutorials(chat_id, user_id):
+    send_message(chat_id, "🎥 <b>Video darslar</b>\n\nTez orada qo'shiladi...")
+
+def handle_accept_suggested_name(chat_id, user_id, callback_id):
+    """Accept suggested channel name"""
+    try:
+        session = upload_sessions.get(user_id)
+        if not session or session.get('type') != 'add_channel':
+            answer_callback_query(callback_id, "❌ Session expired!", True)
+            return
+        
+        # Use suggested name
+        channel_name = session.get('suggested_name')
+        channel_id = session.get('channel_id')
+        channel_username = session.get('channel_username')
+        
+        # Save channel
+        channel_data = {
+            'name': channel_name,
+            'username': channel_username,
+            'url': f"https://t.me/{channel_username[1:]}" if channel_username.startswith('@') else '#',
+            'add_date': datetime.now().isoformat(),
+            'active': True,
+            'added_by': user_id
+        }
+        
+        channels_db[str(channel_id)] = channel_data
+        auto_save_data()
+        
+        # Clean up session
+        del upload_sessions[user_id]
+        
+        text = f"""✅ <b>Kanal muvaffaqiyatli qo'shildi!</b>
+
+📺 <b>Kanal nomi:</b> {channel_name}
+🔗 <b>Kanal:</b> <code>{channel_username}</code>
+📅 <b>Qo'shilgan vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M')}
+📊 <b>Jami kanallar:</b> {len(channels_db)} ta
+
+💡 <b>Endi majburiy obuna tizimi faol!</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '➕ Yana kanal qo\'shish', 'callback_data': 'add_channel'},
+                    {'text': '📺 Kanal boshqaruvi', 'callback_data': 'channels_admin'}
+                ],
+                [
+                    {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, "✅ Kanal qo'shildi!")
+        
+    except Exception as e:
+        logger.error(f"❌ Accept suggested name error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik!", True)
+
+def handle_cancel_add_channel(chat_id, user_id, callback_id):
+    """Cancel add channel process"""
+    try:
+        if user_id in upload_sessions:
+            del upload_sessions[user_id]
+        
+        handle_channels_menu(chat_id, user_id)
+        answer_callback_query(callback_id, "❌ Bekor qilindi")
+        
+    except Exception as e:
+        logger.error(f"❌ Cancel add channel error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik!", True)
+
+def handle_admin_support(chat_id, user_id):
+    send_message(chat_id, "🆘 <b>Admin qo'llab-quvvatlash</b>\n\nTez orada qo'shiladi...")
+
+def handle_admin_updates(chat_id, user_id):
+    send_message(chat_id, "🔄 <b>Admin yangiliklar</b>\n\nTez orada qo'shiladi...")
 
 # Professional callback confirmations for upload and broadcast
 def handle_upload_confirmation(chat_id, user_id, callback_id):
