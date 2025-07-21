@@ -1,123 +1,533 @@
 #!/usr/bin/env python3
 """
-Render deployment entry point - Simple Flask server
+Simple Kino Bot for Render.com deployment
+Clean and working version
 """
 
 import os
-import sys
+import json
+import time
 import logging
+import requests
 from flask import Flask, request, jsonify
-
-# Add current directory to path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, current_dir)
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-
 logger = logging.getLogger(__name__)
 
-# Create Flask app
-app = Flask(__name__)
+# Configuration
+TOKEN = "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
+ADMIN_ID = 5542016161
 
-# Global telegram app
-telegram_app = None
+# Data storage
+users_db = {}
+movies_db = {}
+
+# Helper functions
+def load_data():
+    """Load data from JSON files"""
+    global users_db, movies_db
+    
+    try:
+        if os.path.exists('users.json'):
+            with open('users.json', 'r', encoding='utf-8') as f:
+                users_db = json.load(f)
+                logger.info(f"✅ Loaded {len(users_db)} users")
+        else:
+            users_db = {}
+            
+        if os.path.exists('file_ids.json'):
+            with open('file_ids.json', 'r', encoding='utf-8') as f:
+                movies_db = json.load(f)
+                logger.info(f"✅ Loaded {len(movies_db)} movies")
+        else:
+            movies_db = {}
+            
+    except Exception as e:
+        logger.error(f"❌ Load error: {e}")
+        users_db = {}
+        movies_db = {}
+
+def save_data():
+    """Save data to JSON files"""
+    try:
+        with open('users.json', 'w', encoding='utf-8') as f:
+            json.dump(users_db, f, ensure_ascii=False, indent=2)
+            
+        with open('file_ids.json', 'w', encoding='utf-8') as f:
+            json.dump(movies_db, f, ensure_ascii=False, indent=2)
+            
+        logger.info("💾 Data saved successfully")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Save error: {e}")
+        return False
+
+def send_message(chat_id, text, keyboard=None):
+    """Send message via Telegram Bot API"""
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        data = {
+            'chat_id': chat_id,
+            'text': text,
+            'parse_mode': 'HTML'
+        }
+        
+        if keyboard:
+            data['reply_markup'] = json.dumps(keyboard)
+        
+        response = requests.post(url, data=data, timeout=10)
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Message sent to {chat_id}")
+            return response.json()
+        else:
+            logger.error(f"❌ Failed to send message: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"❌ Send message error: {e}")
+        return None
+
+def send_video(chat_id, video_file_id, caption=""):
+    """Send video via Telegram Bot API"""
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
+        data = {
+            'chat_id': chat_id,
+            'video': video_file_id,
+            'caption': caption,
+            'parse_mode': 'HTML'
+        }
+        
+        response = requests.post(url, data=data, timeout=30)
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Video sent to {chat_id}")
+            return response.json()
+        else:
+            logger.error(f"❌ Failed to send video: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"❌ Send video error: {e}")
+        return None
+
+# Flask app
+app = Flask(__name__)
 
 @app.route('/')
 def home():
-    """Health check endpoint"""
+    """Health check"""
     return jsonify({
-        "status": "ok",
-        "message": "Kino Bot is running on Render!",
-        "platform": "render"
+        "status": "🎬 Kino Bot - Working!",
+        "users": len(users_db),
+        "movies": len(movies_db),
+        "timestamp": int(time.time())
+    })
+
+@app.route('/ping')
+def ping():
+    """Ping endpoint for monitoring"""
+    return jsonify({
+        "status": "alive",
+        "timestamp": int(time.time()),
+        "message": "Pong! 🏓"
     })
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    """Telegram webhook endpoint"""
+    """Main webhook handler"""
     try:
-        if telegram_app is None:
-            return jsonify({"error": "Telegram app not initialized"}), 500
+        data = request.get_json()
+        logger.info(f"📨 Webhook received")
+        
+        if 'message' in data:
+            handle_message(data['message'])
+        elif 'callback_query' in data:
+            handle_callback(data['callback_query'])
             
-        # Process telegram update
-        update_data = request.get_json()
-        if update_data:
-            from telegram import Update
-            update = Update.de_json(update_data, telegram_app.bot)
-            
-            # Process update in background
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(telegram_app.process_update(update))
-            loop.close()
-            
-        return "OK"
+        return "OK", 200
         
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"❌ Webhook error: {e}")
+        return f"ERROR: {str(e)}", 500
 
-def setup_telegram():
-    """Setup telegram bot"""
-    global telegram_app
-    
+def handle_message(message):
+    """Handle incoming message"""
     try:
-        logger.info("� Setting up Telegram bot...")
+        chat_id = message.get('chat', {}).get('id')
+        user_id = message.get('from', {}).get('id')
+        text = message.get('text', '')
         
-        # Import telegram setup
-        import simple_bot
-        telegram_app = simple_bot.create_minimal_app()
+        # Save user
+        users_db[str(user_id)] = {
+            'first_name': message.get('from', {}).get('first_name', ''),
+            'last_seen': int(time.time())
+        }
+        save_data()
         
-        # Setup webhook
-        webhook_url = None
-        render_url = os.getenv('RENDER_EXTERNAL_URL')
+        logger.info(f"💬 Message from {user_id}: {text}")
         
-        if render_url:
-            webhook_url = f"{render_url}/webhook"
-            logger.info(f"🔗 Setting webhook: {webhook_url}")
+        # Handle commands
+        if text == '/start':
+            handle_start(chat_id, user_id)
+        elif text == '/admin':
+            handle_admin(chat_id, user_id)
+        elif text == '/stats':
+            handle_stats(chat_id, user_id)
+        elif 'video' in message:
+            handle_video(chat_id, user_id, message)
+        else:
+            handle_movie_request(chat_id, user_id, text)
             
-            # Set webhook using requests
-            import requests
+    except Exception as e:
+        logger.error(f"❌ Message handling error: {e}")
+
+def handle_start(chat_id, user_id):
+    """Handle /start command"""
+    try:
+        if user_id == ADMIN_ID:
+            text = f"""👑 <b>Admin Panel - Kino Bot</b>
+
+🎬 <b>Statistika:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Kinolar: {len(movies_db)} ta
+
+🔧 <b>Komandalar:</b>
+• /admin - Admin panel
+• /stats - Statistika
+• Kino kodi yuboring: <code>123</code>
+
+🎭 <b>Bot ish holatida!</b>"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '📊 Statistika', 'callback_data': 'admin_stats'}],
+                    [{'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}],
+                    [{'text': '📣 Reklama', 'callback_data': 'broadcast'}],
+                    [{'text': '🎬 Kino joylash', 'callback_data': 'upload_movie'}]
+                ]
+            }
+        else:
+            text = f"""🎬 <b>Kino Bot ga xush kelibsiz!</b>
+
+📽️ <b>Kino olish uchun:</b>
+• Kino kodini yuboring: <code>123</code>
+• Yoki # bilan: <code>#123</code>
+
+📊 <b>Mavjud:</b> {len(movies_db)} ta kino
+
+🚀 <b>Hoziroq kod yuboring!</b>"""
+
+            # Get available movie codes for regular users
+            available_codes = list(movies_db.keys())[:8]  # First 8 codes
+            if available_codes:
+                keyboard = {'inline_keyboard': []}
+                # Add movie codes as buttons, 2 per row
+                for i in range(0, len(available_codes), 2):
+                    row = []
+                    for j in range(2):
+                        if i + j < len(available_codes):
+                            code = available_codes[i + j]
+                            row.append({'text': f'🎬 {code}', 'callback_data': f'movie_{code}'})
+                    keyboard['inline_keyboard'].append(row)
+            else:
+                keyboard = None
+        
+        send_message(chat_id, text, keyboard)
+        logger.info(f"✅ Start sent to {user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Start error: {e}")
+
+def handle_admin(chat_id, user_id):
+    """Handle admin command"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Siz admin emassiz!")
+            return
+        
+        text = f"""👑 <b>Admin Panel</b>
+
+📊 <b>Statistika:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Kinolar: {len(movies_db)} ta
+
+🎬 <b>Kino yuklash:</b>
+• Video fayl yuboring
+• Keyin kod bering
+
+💬 <b>Komandalar:</b>
+• /stats - Batafsil statistika"""
+        
+        send_message(chat_id, text)
+        
+    except Exception as e:
+        logger.error(f"❌ Admin error: {e}")
+
+def handle_stats(chat_id, user_id):
+    """Handle stats command"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Faqat admin statistika ko'ra oladi!")
+            return
+        
+        # Movie codes list
+        movie_codes = list(movies_db.keys())[:10]
+        codes_text = ", ".join(movie_codes) if movie_codes else "Hech narsa yo'q"
+        
+        text = f"""📊 <b>Bot Statistikasi</b>
+
+👥 <b>Foydalanuvchilar:</b> {len(users_db)} ta
+🎬 <b>Kinolar:</b> {len(movies_db)} ta
+
+📋 <b>Mavjud kodlar:</b>
+{codes_text}
+
+⏰ <b>Vaqt:</b> {time.strftime('%Y-%m-%d %H:%M:%S')}
+🤖 <b>Status:</b> ✅ Ishlayapti"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '👥 Foydalanuvchilar', 'callback_data': 'list_users'}],
+                [{'text': '🔄 Yangilash', 'callback_data': 'admin_stats'}],
+                [{'text': '🔙 Bosh sahifa', 'callback_data': 'back_to_start'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Stats error: {e}")
+
+def handle_video(chat_id, user_id, message):
+    """Handle video upload"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Faqat admin video yuklashi mumkin!")
+            return
+        
+        video = message['video']
+        file_id = video['file_id']
+        
+        # Ask for code
+        global waiting_for_code
+        waiting_for_code[chat_id] = file_id
+        
+        send_message(chat_id, f"""✅ <b>Video qabul qilindi!</b>
+
+📝 <b>Endi kino kodini yuboring:</b>
+• Masalan: <code>123</code> yoki <code>#123</code>
+
+🎬 <b>File ID:</b> <code>{file_id[:20]}...</code>""")
+        
+    except Exception as e:
+        logger.error(f"❌ Video handling error: {e}")
+        send_message(chat_id, "❌ Video yuklashda xatolik!")
+
+# Global variable for upload state
+waiting_for_code = {}
+
+def handle_movie_request(chat_id, user_id, text):
+    """Handle movie code or admin input"""
+    try:
+        # Check if admin is uploading
+        if user_id == ADMIN_ID and chat_id in waiting_for_code:
+            # Admin is providing code for uploaded video
+            code = text.strip().replace('#', '')
+            file_id = waiting_for_code.pop(chat_id)
+            
+            # Save movie
+            movies_db[code] = file_id
+            save_data()
+            
+            send_message(chat_id, f"""✅ <b>Kino saqlandi!</b>
+
+📝 <b>Kod:</b> <code>{code}</code>
+🎬 <b>File ID:</b> <code>{file_id[:20]}...</code>
+
+🎉 <b>Endi foydalanuvchilar {code} kodi bilan kino olishlari mumkin!</b>""")
+            return
+        
+        # Regular movie request
+        code = text.strip().replace('#', '')
+        
+        if code in movies_db:
+            file_id = movies_db[code]
+            caption = f"🎬 <b>Kino #{code}</b>\n\n🤖 @uzmovi_film_bot"
+            
+            success = send_video(chat_id, file_id, caption)
+            if success:
+                logger.info(f"✅ Movie {code} sent to {user_id}")
+            else:
+                send_message(chat_id, f"❌ {code} kino yuborishda xatolik!")
+        else:
+            # Movie not found
+            available_codes = list(movies_db.keys())[:5]
+            codes_text = ", ".join(available_codes) if available_codes else "Hozircha yo'q"
+            
+            send_message(chat_id, f"""❌ <b>{text}</b> kod topilmadi!
+
+📋 <b>Mavjud kodlar:</b> {codes_text}
+
+💡 <b>To'g'ri format:</b>
+• <code>123</code>
+• <code>#123</code>""")
+        
+    except Exception as e:
+        logger.error(f"❌ Movie request error: {e}")
+        send_message(chat_id, "❌ Xatolik yuz berdi!")
+
+def handle_callback(callback_query):
+    """Handle callback queries"""
+    try:
+        chat_id = callback_query.get('message', {}).get('chat', {}).get('id')
+        user_id = callback_query.get('from', {}).get('id')
+        data = callback_query.get('data', '')
+        
+        # Answer callback
+        callback_id = callback_query.get('id')
+        answer_callback(callback_id)
+        
+        logger.info(f"🔘 Callback: {data} from {user_id}")
+        
+        # Handle different callbacks
+        if data == 'admin_stats':
+            if user_id == ADMIN_ID:
+                handle_stats(chat_id, user_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data == 'list_users':
+            if user_id == ADMIN_ID:
+                show_users_list(chat_id)
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data == 'broadcast':
+            if user_id == ADMIN_ID:
+                send_message(chat_id, """📣 <b>Reklama yuborish</b>
+
+📝 Reklama matnini yuboring:""")
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data == 'upload_movie':
+            if user_id == ADMIN_ID:
+                send_message(chat_id, """🎬 <b>Kino yuklash</b>
+
+📹 Video faylni yuboring:""")
+            else:
+                send_message(chat_id, "❌ Admin huquqi kerak!")
+                
+        elif data.startswith('movie_'):
+            # User clicked on movie code button
+            code = data.replace('movie_', '')
+            handle_movie_request(chat_id, user_id, code)
+            
+        elif data == 'back_to_start':
+            # Go back to start menu
+            handle_start(chat_id, user_id)
+            
+        else:
+            send_message(chat_id, f"❓ Noma'lum komanda: {data}")
+        
+    except Exception as e:
+        logger.error(f"❌ Callback error: {e}")
+
+def show_users_list(chat_id):
+    """Show users list for admin"""
+    try:
+        if not users_db:
+            send_message(chat_id, "👥 <b>Foydalanuvchilar ro'yxati bo'sh!</b>")
+            return
+            
+        text = f"� <b>Foydalanuvchilar ({len(users_db)} ta)</b>\n\n"
+        
+        count = 1
+        for user_id, user_info in list(users_db.items())[:10]:  # First 10 users
+            name = user_info.get('first_name', 'Noma\'lum')
+            last_seen = user_info.get('last_seen', 0)
+            
+            if last_seen > 0:
+                time_diff = int(time.time()) - last_seen
+                if time_diff < 3600:  # Less than 1 hour
+                    status = "🟢 Faol"
+                elif time_diff < 86400:  # Less than 1 day  
+                    status = "🟡 Bugun"
+                else:
+                    status = "🔴 Eski"
+            else:
+                status = "❓ Noma'lum"
+                
+            text += f"{count}. {name} - {status}\n"
+            text += f"   ID: <code>{user_id}</code>\n\n"
+            count += 1
+            
+        if len(users_db) > 10:
+            text += f"... va yana {len(users_db) - 10} foydalanuvchi"
+            
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🔄 Yangilash', 'callback_data': 'list_users'}],
+                [{'text': '🔙 Orqaga', 'callback_data': 'back_to_start'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Show users error: {e}")
+        send_message(chat_id, "❌ Foydalanuvchilar ro'yxatini olishda xatolik!")
+
+def answer_callback(callback_id):
+    """Answer callback query"""
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery"
+        data = {'callback_query_id': callback_id}
+        requests.post(url, data=data, timeout=5)
+    except:
+        pass
+
+def setup_webhook():
+    """Setup webhook for Render.com"""
+    try:
+        webhook_url = os.getenv('RENDER_EXTERNAL_URL')
+        if webhook_url:
+            webhook_url = f"{webhook_url}/webhook"
+            
             response = requests.post(
-                f"https://api.telegram.org/bot{simple_bot.TOKEN}/setWebhook",
-                data={"url": webhook_url}
+                f"https://api.telegram.org/bot{TOKEN}/setWebhook",
+                data={"url": webhook_url},
+                timeout=10
             )
-            result = response.json()
             
+            result = response.json()
             if result.get('ok'):
-                logger.info("✅ Webhook configured successfully")
+                logger.info(f"✅ Webhook set: {webhook_url}")
             else:
                 logger.error(f"❌ Webhook error: {result}")
         else:
-            logger.warning("⚠️ No RENDER_EXTERNAL_URL found")
+            logger.info("💡 Local mode - no webhook setup")
             
     except Exception as e:
-        logger.error(f"❌ Telegram setup error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Webhook setup error: {e}")
 
-def main():
-    """Main entry point"""
-    logger.info("🎭 Starting Kino Bot on Render...")
-    
-    # Setup telegram bot
-    setup_telegram()
-    
-    # Get port
+# Initialize
+logger.info("🚀 Starting Simple Kino Bot...")
+load_data()
+setup_webhook()
+
+if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8080))
-    logger.info(f"🚀 Starting Flask server on port {port}")
+    logger.info(f"🎬 Kino Bot starting on port {port}")
     
-    # Run Flask app
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=False,
-        threaded=True
+        debug=False
     )
-
-if __name__ == "__main__":
-    main()
