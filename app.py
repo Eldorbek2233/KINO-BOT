@@ -25,8 +25,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-TOKEN = "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
-ADMIN_ID = 5542016161
+TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk")
+ADMIN_ID = int(os.getenv('ADMIN_ID', 5542016161))
 
 # Global Data Storage
 users_db = {}
@@ -34,6 +34,37 @@ movies_db = {}
 channels_db = {}
 upload_sessions = {}
 broadcast_sessions = {}
+
+# Environment-based data persistence
+def save_to_environment():
+    """Save data to environment variables for persistence"""
+    try:
+        # This would be used with external environment management
+        # For now, we use file-based storage as backup
+        pass
+    except Exception as e:
+        logger.error(f"❌ Environment save error: {e}")
+
+def load_from_environment():
+    """Load data from environment variables"""
+    try:
+        # Load from environment variables if available
+        users_env = os.getenv('USERS_DATA')
+        if users_env:
+            users_db.update(json.loads(users_env))
+            
+        movies_env = os.getenv('MOVIES_DATA')
+        if movies_env:
+            movies_db.update(json.loads(movies_env))
+            
+        channels_env = os.getenv('CHANNELS_DATA')
+        if channels_env:
+            channels_db.update(json.loads(channels_env))
+            
+        logger.info("✅ Environment data loaded")
+        
+    except Exception as e:
+        logger.error(f"❌ Environment load error: {e}")
 
 # Auto-save system
 def auto_save_data():
@@ -80,29 +111,45 @@ def load_data():
     global users_db, movies_db, channels_db
     
     try:
-        # Load users
+        # First try to load from environment variables
+        load_from_environment()
+        
+        # Then load from files (as backup)
         if os.path.exists('users.json'):
             with open('users.json', 'r', encoding='utf-8') as f:
-                users_db = json.load(f)
-                logger.info(f"✅ Loaded {len(users_db)} users")
+                file_users = json.load(f)
+                # Merge with environment data
+                for k, v in file_users.items():
+                    if k not in users_db:
+                        users_db[k] = v
+                logger.info(f"✅ Loaded {len(file_users)} users from file")
         else:
-            users_db = {}
+            users_db = users_db or {}
             
         # Load movies
         if os.path.exists('file_ids.json'):
             with open('file_ids.json', 'r', encoding='utf-8') as f:
-                movies_db = json.load(f)
-                logger.info(f"✅ Loaded {len(movies_db)} movies")
+                file_movies = json.load(f)
+                for k, v in file_movies.items():
+                    if k not in movies_db:
+                        movies_db[k] = v
+                logger.info(f"✅ Loaded {len(file_movies)} movies from file")
         else:
-            movies_db = {}
+            movies_db = movies_db or {}
             
         # Load channels
         if os.path.exists('channels.json'):
             with open('channels.json', 'r', encoding='utf-8') as f:
-                channels_db = json.load(f)
-                logger.info(f"✅ Loaded {len(channels_db)} channels")
+                file_channels = json.load(f)
+                for k, v in file_channels.items():
+                    if k not in channels_db:
+                        channels_db[k] = v
+                logger.info(f"✅ Loaded {len(file_channels)} channels from file")
         else:
-            channels_db = {}
+            channels_db = channels_db or {}
+            
+        logger.info(f"📊 Total loaded: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
+        return True
             
     except Exception as e:
         logger.error(f"❌ Data loading error: {e}")
