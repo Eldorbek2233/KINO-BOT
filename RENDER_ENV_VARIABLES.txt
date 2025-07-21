@@ -1,0 +1,29 @@
+# RENDER.COM ENVIRONMENT VARIABLES
+# Bu ma'lumotlarni Render.com dashboard -> Environment tab ga qo'shing
+
+# Bot Token
+BOT_TOKEN=8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk
+
+# Admin ID
+ADMIN_ID=5542016161
+
+# MongoDB Connection - Sizning haqiqiy connection string
+MONGODB_URI=mongodb+srv://eldorbekxakimxujayev4:7cszqUNVFq6TPGz1@kinobot-cluster.quzswag.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster
+
+# Database Name
+DB_NAME=kinobot
+
+# Port (automatically set by Render)
+PORT=8080
+
+# ============================================
+# QADAMLAR:
+# ============================================
+
+# 1. YOUR_REAL_PASSWORD o'rniga MongoDB parolingizni qo'ying
+# 2. Render.com dashboard ga kiring
+# 3. Service tanlang
+# 4. Environment tab ni oching
+# 5. Har bir variable ni alohida qo'shing
+# 6. Save tugmasini bosing
+# 7. Manual Deploy qiling

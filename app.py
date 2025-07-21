@@ -2,7 +2,7 @@
 """
 🎭 ULTIMATE PROFESSIONAL KINO BOT V3.0 🎭
 Professional Telegram Bot with Full Admin Panel & Broadcasting System
-Complete and Error-Free Implementation for Render.com
+Complete and Error-Free Implementation for Render.com with MongoDB
 """
 
 import os
@@ -13,6 +13,8 @@ import threading
 import requests
 from flask import Flask, request, jsonify
 from datetime import datetime
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 # Configure professional logging
 logging.basicConfig(
@@ -27,6 +29,50 @@ logger = logging.getLogger(__name__)
 # Configuration
 TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk")
 ADMIN_ID = int(os.getenv('ADMIN_ID', 5542016161))
+
+# MongoDB Configuration
+MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb+srv://eldorbekxakimxujayev4:YOUR_PASSWORD@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster')
+DB_NAME = os.getenv('DB_NAME', 'kinobot')
+
+# MongoDB Connection
+mongo_client = None
+mongo_db = None
+
+def init_mongodb():
+    """Initialize MongoDB connection"""
+    global mongo_client, mongo_db
+    try:
+        if not MONGODB_URI or MONGODB_URI.startswith('mongodb+srv://username:password'):
+            logger.warning("⚠️ MongoDB URI not configured, using file storage")
+            return False
+            
+        mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        # Test connection
+        mongo_client.admin.command('ping')
+        mongo_db = mongo_client[DB_NAME]
+        
+        # Create indexes for better performance
+        mongo_db.movies.create_index("code", unique=True)
+        mongo_db.movies.create_index("title")
+        mongo_db.movies.create_index("upload_date")
+        mongo_db.users.create_index("user_id", unique=True)
+        mongo_db.channels.create_index("channel_id", unique=True)
+        
+        logger.info("✅ MongoDB connected successfully")
+        return True
+        
+    except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+        logger.error(f"❌ MongoDB connection failed: {e}")
+        mongo_client = None
+        mongo_db = None
+        return False
+    except Exception as e:
+        logger.error(f"❌ MongoDB init error: {e}")
+        return False
+
+def is_mongodb_available():
+    """Check if MongoDB is available"""
+    return mongo_db is not None
 
 # Global Data Storage
 users_db = {}
@@ -97,11 +143,120 @@ def auto_save_data():
     except Exception as e:
         logger.error(f"❌ Auto-save error: {e}")
         return False
-        with open('channels.json', 'w', encoding='utf-8') as f:
-            json.dump(channels_db, f, ensure_ascii=False, indent=2)
+
+# MongoDB Database Functions
+def save_movie_to_mongodb(movie_data):
+    """Save movie to MongoDB"""
+    try:
+        if not is_mongodb_available():
+            logger.warning("MongoDB not available, using file storage")
+            return False
             
-        logger.info("💾 Auto-save completed successfully")
+        # Prepare movie document
+        movie_doc = {
+            'code': movie_data['code'],
+            'title': movie_data['title'],
+            'file_id': movie_data['file_id'],
+            'file_name': movie_data.get('file_name', ''),
+            'file_size': movie_data.get('file_size', 0),
+            'additional_info': movie_data.get('additional_info', ''),
+            'upload_date': datetime.now(),
+            'uploaded_by': movie_data.get('uploaded_by', ADMIN_ID),
+            'status': 'active'
+        }
+        
+        # Insert to MongoDB
+        result = mongo_db.movies.insert_one(movie_doc)
+        logger.info(f"✅ Movie saved to MongoDB: {movie_data['code']} - {movie_data['title']}")
+        return result.inserted_id
+        
+    except Exception as e:
+        logger.error(f"❌ MongoDB save error: {e}")
+        return False
+
+def get_movie_from_mongodb(code):
+    """Get movie from MongoDB"""
+    try:
+        if not is_mongodb_available():
+            return None
+            
+        movie = mongo_db.movies.find_one({'code': code, 'status': 'active'})
+        return movie
+        
+    except Exception as e:
+        logger.error(f"❌ MongoDB get error: {e}")
+        return None
+
+def get_all_movies_from_mongodb():
+    """Get all movies from MongoDB"""
+    try:
+        if not is_mongodb_available():
+            return []
+            
+        movies = list(mongo_db.movies.find({'status': 'active'}).sort('upload_date', -1))
+        return movies
+        
+    except Exception as e:
+        logger.error(f"❌ MongoDB get all error: {e}")
+        return []
+
+def save_user_to_mongodb(user_data):
+    """Save user to MongoDB"""
+    try:
+        if not is_mongodb_available():
+            return False
+            
+        user_doc = {
+            'user_id': user_data['user_id'],
+            'username': user_data.get('username', ''),
+            'first_name': user_data.get('first_name', ''),
+            'last_name': user_data.get('last_name', ''),
+            'join_date': user_data.get('join_date', datetime.now()),
+            'last_active': datetime.now(),
+            'status': 'active'
+        }
+        
+        # Upsert user (update if exists, insert if not)
+        mongo_db.users.update_one(
+            {'user_id': user_data['user_id']},
+            {'$set': user_doc},
+            upsert=True
+        )
+        
         return True
+        
+    except Exception as e:
+        logger.error(f"❌ MongoDB user save error: {e}")
+        return False
+
+# Auto-save enhanced system
+def enhanced_auto_save():
+    """Enhanced auto-save with MongoDB integration"""
+    try:
+        # Save to files (backup)
+        file_save_success = auto_save_data()
+        
+        # Save to MongoDB if available
+        mongodb_save_success = False
+        if is_mongodb_available():
+            try:
+                # Save all users to MongoDB
+                for user_id, user_data in users_db.items():
+                    user_data['user_id'] = int(user_id)
+                    save_user_to_mongodb(user_data)
+                
+                # Movies are saved individually during upload
+                mongodb_save_success = True
+                logger.info("✅ Enhanced auto-save: Files + MongoDB completed")
+                
+            except Exception as e:
+                logger.error(f"❌ MongoDB auto-save error: {e}")
+        
+        return file_save_success or mongodb_save_success
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced auto-save error: {e}")
+        return False
     except Exception as e:
         logger.error(f"❌ Auto-save error: {e}")
         return False
@@ -1062,16 +1217,35 @@ def handle_movie_request(chat_id, user_id, code):
 🔧 <b>Sabab:</b> Telegram API xatolik
 📞 <b>Admin bilan bog'laning!</b>
 
-🎭 <b>Ultimate Professional Kino Bot</b>""")
+🎭 <b>Professional MongoDB + Ultimate Bot</b>""")
         else:
-            # Movie not found
-            available_codes = list(movies_db.keys())[:10]
+            # Movie not found - check both MongoDB and file storage
+            available_codes = []
+            
+            # Get codes from MongoDB
+            if is_mongodb_available():
+                try:
+                    mongo_movies = get_all_movies_from_mongodb()
+                    mongo_codes = [movie['code'] for movie in mongo_movies[:5]]
+                    available_codes.extend(mongo_codes)
+                except Exception as e:
+                    logger.error(f"❌ Error getting MongoDB codes: {e}")
+            
+            # Get codes from file storage
+            file_codes = list(movies_db.keys())[:5]
+            available_codes.extend(file_codes)
+            
+            # Remove duplicates and limit
+            available_codes = list(dict.fromkeys(available_codes))[:10]
             codes_text = ", ".join(available_codes) if available_codes else "Hozircha mavjud emas"
             
             text = f"""❌ <b>"{original_code}"</b> kod topilmadi!
 
 🔍 <b>Mavjud kodlar:</b>
 {codes_text}
+
+📊 <b>Database:</b> MongoDB + JSON backup
+🎬 <b>Jami kinolar:</b> {len(movies_db)} ta (file) + MongoDB
 
 💡 <b>To'g'ri format:</b>
 • <code>123</code> - Oddiy raqam
@@ -1093,6 +1267,7 @@ def handle_movie_request(chat_id, user_id, code):
             
             send_message(chat_id, text, keyboard)
             logger.warning(f"❌ Movie not found: {original_code} for user {user_id}")
+            logger.info(f"📊 Searched in MongoDB: {'✅' if is_mongodb_available() else '❌'}, File storage: ✅")
         
     except Exception as e:
         logger.error(f"❌ Movie request error: {e}")
@@ -1639,6 +1814,7 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             'test_subscription': lambda: handle_test_subscription(chat_id, user_id),
             'accept_suggested_name': lambda: handle_accept_suggested_name(chat_id, user_id, callback_id),
             'cancel_add_channel': lambda: handle_cancel_add_channel(chat_id, user_id, callback_id),
+            'skip_additional_info': lambda: handle_skip_additional_info(chat_id, user_id, callback_id),
             
             # Upload callbacks
             'upload_stats': lambda: handle_upload_statistics(chat_id, user_id),
@@ -1895,26 +2071,23 @@ Masalan: <code>123</code> yoki <code>#movies123</code>"""
                 code = text.replace('#', '').strip()
                 if code:
                     session.update({
-                        'status': 'confirming',
+                        'status': 'waiting_title',
                         'code': code
                     })
                     
-                    # Show confirmation
-                    file_name = session.get('file_name', 'video')
-                    size_mb = session.get('file_size', 0) / (1024 * 1024)
-                    
-                    text = f"""✅ <b>Ma'lumotlarni tasdiqlang:</b>
+                    # Ask for movie title
+                    text = f"""✅ <b>Kod qabul qilindi!</b>
 
 🔖 <b>Kod:</b> <code>{code}</code>
-📹 <b>Fayl:</b> <code>{file_name}</code>
-📦 <b>Hajmi:</b> <code>{size_mb:.1f} MB</code>
 
-Barcha ma'lumotlar to'g'rimi?"""
+🎬 <b>Endi kino nomini kiriting:</b>
+Masalan: <code>Avatar 2022</code> yoki <code>Terminator 1984</code>
+
+💡 <b>Kino nomi aniq va to'liq bo'lishi kerak!</b>"""
 
                     keyboard = {
                         'inline_keyboard': [
                             [
-                                {'text': '✅ Tasdiqlash', 'callback_data': 'confirm_upload'},
                                 {'text': '❌ Bekor qilish', 'callback_data': 'cancel_upload'}
                             ]
                         ]
@@ -1925,6 +2098,91 @@ Barcha ma'lumotlar to'g'rimi?"""
                     send_message(chat_id, "❌ To'g'ri kod kiriting!")
             else:
                 send_message(chat_id, "❌ To'g'ri kod kiriting!")
+                
+        elif session['status'] == 'waiting_title':
+            # Get movie title
+            title = message.get('text', '').strip()
+            
+            if title and title != '/cancel':
+                session.update({
+                    'status': 'waiting_additional_info',
+                    'title': title
+                })
+                
+                # Ask for additional info (optional)
+                text = f"""✅ <b>Kino nomi qabul qilindi!</b>
+
+🎬 <b>Kino nomi:</b> {title}
+� <b>Kod:</b> <code>{session.get('code')}</code>
+
+� <b>Qo'shimcha ma'lumotlar (ixtiyoriy):</b>
+
+Yil, janr, rejissyor va boshqa ma'lumotlarni kiriting:
+Masalan: <code>2022, Action/Sci-Fi, James Cameron</code>
+
+Yoki "ok" deb yuboring bu bosqichni o'tkazib yuborish uchun."""
+
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '✅ O\'tkazib yuborish', 'callback_data': 'skip_additional_info'},
+                            {'text': '❌ Bekor qilish', 'callback_data': 'cancel_upload'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, text, keyboard)
+            else:
+                send_message(chat_id, "❌ Kino nomini kiriting!")
+                
+        elif session['status'] == 'waiting_additional_info':
+            # Get additional info
+            additional_info = message.get('text', '').strip()
+            
+            if additional_info.lower() in ['ok', 'yo\'q', 'no', 'skip']:
+                additional_info = ""
+            
+            session.update({
+                'status': 'confirming',
+                'additional_info': additional_info
+            })
+            
+            # Show final confirmation
+            file_name = session.get('file_name', 'video')
+            size_mb = session.get('file_size', 0) / (1024 * 1024)
+            code = session.get('code')
+            title = session.get('title')
+            
+            text = f"""✅ <b>YAKUNIY TASDIQLASH</b>
+
+🎬 <b>Kino ma'lumotlari:</b>
+• Nomi: <b>{title}</b>
+• Kod: <code>{code}</code>
+• Fayl: <code>{file_name}</code>
+• Hajmi: <code>{size_mb:.1f} MB</code>"""
+
+            if additional_info:
+                text += f"\n• Qo'shimcha: <i>{additional_info}</i>"
+
+            text += f"""
+
+📊 <b>MongoDB ga saqlanadi:</b>
+• Professional database
+• Full metadata
+• Backup enabled
+
+Barcha ma'lumotlar to'g'rimi?"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '✅ SAQLASH', 'callback_data': 'confirm_upload'},
+                        {'text': '❌ Bekor qilish', 'callback_data': 'cancel_upload'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
                 
     except Exception as e:
         logger.error(f"❌ Upload session error: {e}")
@@ -2538,6 +2796,56 @@ def handle_accept_suggested_name(chat_id, user_id, callback_id):
         logger.error(f"❌ Accept suggested name error: {e}")
         answer_callback_query(callback_id, "❌ Xatolik!", True)
 
+def handle_skip_additional_info(chat_id, user_id, callback_id):
+    """Skip additional info step"""
+    try:
+        session = upload_sessions.get(user_id)
+        if not session or session.get('status') != 'waiting_additional_info':
+            answer_callback_query(callback_id, "❌ Session expired!", True)
+            return
+        
+        session.update({
+            'status': 'confirming',
+            'additional_info': ""
+        })
+        
+        # Show final confirmation
+        file_name = session.get('file_name', 'video')
+        size_mb = session.get('file_size', 0) / (1024 * 1024)
+        code = session.get('code')
+        title = session.get('title')
+        
+        text = f"""✅ <b>YAKUNIY TASDIQLASH</b>
+
+🎬 <b>Kino ma'lumotlari:</b>
+• Nomi: <b>{title}</b>
+• Kod: <code>{code}</code>
+• Fayl: <code>{file_name}</code>
+• Hajmi: <code>{size_mb:.1f} MB</code>
+
+📊 <b>MongoDB ga saqlanadi:</b>
+• Professional database
+• Full metadata
+• Backup enabled
+
+Barcha ma'lumotlar to'g'rimi?"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '✅ SAQLASH', 'callback_data': 'confirm_upload'},
+                    {'text': '❌ Bekor qilish', 'callback_data': 'cancel_upload'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, "✅ O'tkazib yuborildi")
+        
+    except Exception as e:
+        logger.error(f"❌ Skip additional info error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik!", True)
+
 def handle_cancel_add_channel(chat_id, user_id, callback_id):
     """Cancel add channel process"""
     try:
@@ -2559,55 +2867,89 @@ def handle_admin_updates(chat_id, user_id):
 
 # Professional callback confirmations for upload and broadcast
 def handle_upload_confirmation(chat_id, user_id, callback_id):
-    """Handle upload confirmation"""
+    """Handle upload confirmation with MongoDB integration"""
     try:
         session = upload_sessions.get(user_id)
         if not session or session.get('status') != 'confirming':
             answer_callback_query(callback_id, "❌ Session expired!", True)
             return
         
-        # Save the movie
+        # Prepare movie data
         code = session['code']
+        title = session['title']
         file_id = session['file_id']
+        additional_info = session.get('additional_info', '')
         
         movie_data = {
+            'code': code,
+            'title': title,
             'file_id': file_id,
-            'title': f"Kino {code}",
-            'upload_date': datetime.now().isoformat(),
+            'file_name': session.get('file_name', 'video'),
             'file_size': session.get('file_size', 0),
             'duration': session.get('duration', 0),
-            'file_name': session.get('file_name', 'video')
+            'additional_info': additional_info,
+            'upload_date': datetime.now().isoformat(),
+            'uploaded_by': user_id
         }
         
+        # Save to file storage (backup)
         movies_db[code] = movie_data
+        
+        # Save to MongoDB if available
+        mongodb_saved = False
+        if is_mongodb_available():
+            mongodb_result = save_movie_to_mongodb(movie_data)
+            mongodb_saved = mongodb_result is not False
+        
+        # Auto-save files
         auto_save_data()
         
         # Clean up session
         del upload_sessions[user_id]
         
-        text = f"""✅ <b>Kino muvaffaqiyatli saqlandi!</b>
+        # Success message
+        storage_info = "📊 **Saqlash holati:**\n"
+        storage_info += f"• JSON fayl: ✅ Saqlandi\n"
+        if mongodb_saved:
+            storage_info += f"• MongoDB: ✅ Saqlandi\n"
+        else:
+            storage_info += f"• MongoDB: ⚠️ Mavjud emas\n"
+        
+        text = f"""✅ <b>KINO MUVAFFAQIYATLI SAQLANDI!</b>
 
-🔖 <b>Kod:</b> <code>{code}</code>
-📹 <b>Fayl:</b> {session.get('file_name', 'video')}
-📊 <b>Jami kinolar:</b> {len(movies_db)} ta
+🎬 <b>Kino ma'lumotlari:</b>
+• **Nomi:** {title}
+• **Kod:** <code>{code}</code>
+• **Fayl:** {session.get('file_name', 'video')}
+• **Hajmi:** {session.get('file_size', 0) / (1024*1024):.1f} MB
+{f"• **Qo'shimcha:** {additional_info}" if additional_info else ""}
 
-Bot foydalanuvchilari endi <code>{code}</code> kodi bilan kinoni olishlari mumkin!"""
+{storage_info}
+
+� <b>Statistika:</b>
+• **Jami kinolar:** {len(movies_db)} ta
+• **Database:** Professional MongoDB + JSON backup
+
+🎯 Foydalanuvchilar endi <code>{code}</code> kodi bilan kinoni olishlari mumkin!"""
 
         keyboard = {
             'inline_keyboard': [
                 [
                     {'text': '🎬 Yana yuklash', 'callback_data': 'movies_admin'},
+                    {'text': '📊 Statistika', 'callback_data': 'admin_stats'}
+                ],
+                [
                     {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
                 ]
             ]
         }
         
         send_message(chat_id, text, keyboard)
-        answer_callback_query(callback_id, "✅ Saqlandi!")
+        answer_callback_query(callback_id, "✅ Professional saqlash tugallandi!")
         
     except Exception as e:
         logger.error(f"❌ Upload confirmation error: {e}")
-        answer_callback_query(callback_id, "❌ Xatolik!", True)
+        answer_callback_query(callback_id, "❌ Xatolik yuz berdi!", True)
 
 def handle_broadcast_confirmation(chat_id, user_id, callback_id):
     """Handle broadcast confirmation"""
@@ -2675,9 +3017,17 @@ def handle_broadcast_confirmation(chat_id, user_id, callback_id):
 # Initialize and run
 initialize_bot()
 
+# Initialize MongoDB
+mongodb_status = init_mongodb()
+if mongodb_status:
+    logger.info("🎯 MongoDB integration: ACTIVE")
+else:
+    logger.info("⚠️ MongoDB integration: DISABLED (using file storage)")
+
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8080))
     logger.info(f"🎭 Professional Kino Bot starting on port {port}")
+    logger.info(f"📊 Database: MongoDB {'✅' if mongodb_status else '❌'} + JSON backup ✅")
     
     app.run(
         host='0.0.0.0',
@@ -2685,3 +3035,4 @@ if __name__ == "__main__":
         debug=False,
         threaded=True
     )
+https://cloud.mongodb.com/https://cloud.mongodb.com/
