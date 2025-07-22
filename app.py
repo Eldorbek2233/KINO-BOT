@@ -1160,7 +1160,10 @@ def initialize_bot():
         logger.info("🎭 Starting Ultimate Professional Kino Bot V3.0...")
         logger.info("=" * 60)
         
-        # Load data
+        # Initialize MongoDB connection first
+        init_mongodb()
+        
+        # Load data from MongoDB
         load_data()
         logger.info(f"📊 Statistics: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
         
@@ -1571,7 +1574,7 @@ def handle_help_user(chat_id, user_id):
 
 📞 <b>Qo'llab-quvvatlash:</b>
 • Admin: @Eldorbek_Xakimxujayev
-• Kanal: @tajima_kino_movie
+• Kanal: @tarjima_kino_movie
 • Guruh: @tarjima_kino_buyurtma
 
 🎯 <b>Xususiyatlar:</b>
