@@ -127,8 +127,8 @@ def auto_save_data():
                         'username': user_data.get('username', ''),
                         'first_name': user_data.get('first_name', ''),
                         'last_name': user_data.get('last_name', ''),
-                        'join_date': user_data.get('join_date', datetime.now()),
-                        'last_active': datetime.now(),
+                        'join_date': user_data.get('join_date', datetime.now().isoformat()),
+                        'last_active': datetime.now().isoformat(),
                         'message_count': user_data.get('message_count', 0),
                         'status': 'active'
                     }
@@ -146,7 +146,7 @@ def auto_save_data():
                         'name': channel_data.get('name', ''),
                         'username': channel_data.get('username', ''),
                         'url': channel_data.get('url', ''),
-                        'add_date': channel_data.get('add_date', datetime.now()),
+                        'add_date': channel_data.get('add_date', datetime.now().isoformat()),
                         'active': channel_data.get('active', True),
                         'added_by': channel_data.get('added_by', ADMIN_ID)
                     }
@@ -358,9 +358,6 @@ def enhanced_auto_save():
         
     except Exception as e:
         logger.error(f"❌ Enhanced auto-save error: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"❌ Auto-save error: {e}")
         return False
 
 def load_data():
@@ -899,31 +896,13 @@ def handle_start_command(chat_id, user_id, user_info):
 
 🚀 <b>Boshlash uchun kino kodini yuboring!</b>"""
 
-            # Create movie buttons if available
-            movie_codes = list(movies_db.keys())[:8]  # First 8 movies
+            # Create simple keyboard without showing movie codes
             keyboard = {'inline_keyboard': []}
-            
-            if movie_codes:
-                # Add "Mavjud Kinolar" header button
-                keyboard['inline_keyboard'].append([
-                    {'text': '🎬 Mavjud Kinolar', 'callback_data': 'movies_list'}
-                ])
-                
-                # Add movie code buttons (2 per row)
-                for i in range(0, min(6, len(movie_codes)), 2):
-                    row = []
-                    for j in range(2):
-                        if i + j < len(movie_codes):
-                            code = movie_codes[i + j]
-                            display_code = code.replace('#', '') if code.startswith('#') else code
-                            row.append({'text': f'🎬 {display_code}', 'callback_data': f'movie_{code}'})
-                    if row:
-                        keyboard['inline_keyboard'].append(row)
             
             # Add utility buttons
             keyboard['inline_keyboard'].extend([
                 [
-                    {'text': '🔍 Barcha Kinolar', 'callback_data': 'all_movies'},
+                    {'text': '� Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'},
                     {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
                 ]
             ])
@@ -967,11 +946,6 @@ def handle_callback_query(callback_query):
             handle_help_admin(chat_id, user_id)
         elif data == 'help_user':
             handle_help_user(chat_id, user_id)
-        elif data == 'movies_list':
-            handle_movies_list(chat_id, user_id)
-        elif data == 'all_movies':
-            handle_all_movies(chat_id, user_id)
-            answer_callback_query(callback_id, "🎬 Barcha kinolar")
             
         elif data.startswith('movie_'):
             code = data.replace('movie_', '')
@@ -1003,8 +977,18 @@ def handle_callback_query(callback_query):
             handle_help_user(chat_id, user_id)
             answer_callback_query(callback_id, "📖 Yordam")
             
-        elif data == 'search_movies':
-            text = """🔍 <b>PROFESSIONAL QIDIRUV TIZIMI</b>
+        elif data == 'search_movies' or data == 'all_movies' or data == 'movies_list':
+            # Foydalanuvchilar uchun kinolar ro'yxati va qidiruv o'chirilgan
+            if user_id == ADMIN_ID:
+                # Admin uchun ruxsat berilgan
+                if data == 'all_movies':
+                    handle_all_movies(chat_id, user_id)
+                    answer_callback_query(callback_id, "🎬 Barcha kinolar")
+                elif data == 'movies_list':
+                    handle_movies_list(chat_id, user_id)
+                    answer_callback_query(callback_id, "🎬 Kinolar ro'yxati")
+                else:
+                    text = """🔍 <b>ADMIN QIDIRUV TIZIMI</b>
 
 🎯 <b>Qidiruv usullari:</b>
 • Kino nomi bo'yicha
@@ -1013,18 +997,42 @@ def handle_callback_query(callback_query):
 • Kod bo'yicha
 
 📝 <b>Qidiruv so'zini yuboring:</b>"""
-            
-            keyboard = {
-                'inline_keyboard': [
-                    [
-                        {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
-                        {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                    
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
+                                {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                            ]
+                        ]
+                    }
+                    
+                    send_message(chat_id, text, keyboard)
+                    answer_callback_query(callback_id, "🔍 Admin qidiruv")
+            else:
+                # Oddiy foydalanuvchilar uchun
+                text = """🎬 <b>Kino qidirish</b>
+
+📝 <b>Kino kodini to'g'ridan-to'g'ri yuboring:</b>
+• Masalan: <code>123</code>
+• Yoki: <code>#123</code>
+
+📞 <b>Yordam kerak bo'lsa admin bilan bog'laning:</b>
+@Eldorbek_Xakimxujayev
+
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+                
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'},
+                            {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                        ]
                     ]
-                ]
-            }
-            
-            send_message(chat_id, text, keyboard)
-            answer_callback_query(callback_id, "🔍 Qidiruv rejimi")
+                }
+                
+                send_message(chat_id, text, keyboard)
+                answer_callback_query(callback_id, "💡 Kino kodini yuboring")
             
         elif data == 'confirm_upload':
             handle_upload_confirmation(chat_id, user_id, callback_id)
@@ -1413,47 +1421,43 @@ def handle_movie_request(chat_id, user_id, code):
 
 🎭 <b>Professional MongoDB + Ultimate Bot</b>""")
         else:
-            # Movie not found - check both MongoDB and file storage
+            # Movie not found - show only available codes from existing movies
             available_codes = []
             
-            # Get codes from MongoDB
-            if is_mongodb_available():
+            # Get codes from local storage (file_ids.json)
+            if movies_db:
+                # Take only first 5 codes from actual saved movies
+                file_codes = list(movies_db.keys())[:5]
+                available_codes.extend(file_codes)
+            
+            # Get codes from MongoDB only if local storage is empty
+            if not available_codes and is_mongodb_available():
                 try:
                     mongo_movies = get_all_movies_from_mongodb()
-                    mongo_codes = [movie['code'] for movie in mongo_movies[:5]]
+                    mongo_codes = [movie['code'] for movie in mongo_movies[:5] if 'code' in movie]
                     available_codes.extend(mongo_codes)
                 except Exception as e:
                     logger.error(f"❌ Error getting MongoDB codes: {e}")
             
-            # Get codes from file storage
-            file_codes = list(movies_db.keys())[:5]
-            available_codes.extend(file_codes)
-            
-            # Remove duplicates and limit
-            available_codes = list(dict.fromkeys(available_codes))[:10]
-            codes_text = ", ".join(available_codes) if available_codes else "Hozircha mavjud emas"
+            # Remove duplicates and ensure we only show real codes
+            available_codes = list(dict.fromkeys(available_codes))[:5]
             
             text = f"""❌ <b>"{original_code}"</b> kod topilmadi!
 
-🔍 <b>Mavjud kodlar:</b>
-{codes_text}
+🎬 <b>Kino qidirish:</b>
+• To'g'ri kod formatini kiriting
+• Raqamlar bilan: <code>123</code>
+• # belgisi bilan: <code>#123</code>
 
-📊 <b>Database:</b> MongoDB + JSON backup
-🎬 <b>Jami kinolar:</b> {len(movies_db)} ta (file) + MongoDB
+📞 <b>Yordam kerakmi?</b>
+Admin bilan bog'laning: @Eldorbek_Xakimxujayev
 
-💡 <b>To'g'ri format:</b>
-• <code>123</code> - Oddiy raqam
-• <code>#123</code> - # belgisi bilan
-
-🎬 <b>Barcha kinolar ro'yxati uchun tugmani bosing:</b>"""
+🎭 <b>Ultimate Professional Kino Bot</b>"""
 
             keyboard = {
                 'inline_keyboard': [
                     [
-                        {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
-                        {'text': '🔍 Qidiruv', 'callback_data': 'search_movies'}
-                    ],
-                    [
+                        {'text': '📞 Admin bilan bog\'laning', 'url': 'https://t.me/Eldorbek_Xakimxujayev'},
                         {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
                     ]
                 ]
@@ -1474,12 +1478,30 @@ def handle_movie_request(chat_id, user_id, code):
 def handle_all_movies(chat_id, user_id):
     """Show all available movies in a professional format"""
     try:
-        if not movies_db:
+        # Combine both MongoDB and local storage movies
+        all_movies = {}
+        
+        # First, get movies from local storage
+        if movies_db:
+            all_movies.update(movies_db)
+        
+        # Then, get movies from MongoDB if available
+        if is_mongodb_available():
+            try:
+                mongo_movies = get_all_movies_from_mongodb()
+                for movie in mongo_movies:
+                    code = movie.get('code')
+                    if code and code not in all_movies:
+                        all_movies[code] = movie
+            except Exception as e:
+                logger.error(f"❌ Error loading MongoDB movies: {e}")
+        
+        if not all_movies:
             text = """🎬 <b>Kinolar ro'yxati</b>
 
 ❌ <b>Hozircha kinolar mavjud emas!</b>
 
-📞 Admin bilan bog'laning yoki keyinroq qaytib ko'ring.
+📞 Admin bilan bog'laning: @Eldorbek_Xakimxujayev
 
 🎭 <b>Ultimate Professional Kino Bot</b>"""
             
@@ -1493,11 +1515,11 @@ def handle_all_movies(chat_id, user_id):
             return
         
         # Create movie list with pagination
-        movies_per_page = 20
-        movie_list = list(movies_db.keys())
+        movies_per_page = 15
+        movie_list = list(all_movies.keys())
         total_movies = len(movie_list)
         
-        text = f"""🎬 <b>BARCHA KINOLAR RO'YXATI</b>
+        text = f"""🎬 <b>MAVJUD KINOLAR RO'YXATI</b>
 
 📊 <b>Jami kinolar:</b> <code>{total_movies}</code> ta
 
@@ -1505,20 +1527,21 @@ def handle_all_movies(chat_id, user_id):
 
 """
         
-        # Add movies to text (first 20)
+        # Add movies to text (first 15)
         for i, code in enumerate(movie_list[:movies_per_page], 1):
-            if isinstance(movies_db[code], dict):
-                title = movies_db[code].get('title', f'Kino {code}')
+            movie_info = all_movies[code]
+            if isinstance(movie_info, dict):
+                title = movie_info.get('title', f'Kino {code}')
                 text += f"{i}. <code>{code}</code> - {title}\n"
             else:
                 text += f"{i}. <code>{code}</code> - Kino {code}\n"
         
         if total_movies > movies_per_page:
-            text += f"\n... va yana {total_movies - movies_per_page} ta kino"
+            text += f"\n... va yana <code>{total_movies - movies_per_page}</code> ta kino"
         
         text += f"\n\n💡 <b>Ishlatish:</b> Kod yuboring yoki tugmani bosing"
         
-        # Create buttons for popular movies
+        # Create buttons for popular movies (only first 6)
         keyboard = {'inline_keyboard': []}
         popular_movies = movie_list[:6]  # First 6 movies
         
@@ -1587,10 +1610,6 @@ def handle_help_user(chat_id, user_id):
 
         keyboard = {
             'inline_keyboard': [
-                [
-                    {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
-                    {'text': '🔍 Qidiruv', 'callback_data': 'search_movies'}
-                ],
                 [
                     {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'},
                     {'text': '📺 Kanal', 'url': 'https://t.me/tarjima_kino_movie'}
