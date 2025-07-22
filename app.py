@@ -114,31 +114,91 @@ def load_from_environment():
 
 # Auto-save system
 def auto_save_data():
-    """Professional auto-save system with error handling"""
+    """Professional auto-save system with MongoDB priority"""
     try:
-        # Save users
-        with open('users.json', 'w', encoding='utf-8') as f:
-            json.dump(users_db, f, ensure_ascii=False, indent=2)
+        # Priority 1: Save to MongoDB if available
+        mongodb_success = False
+        if is_mongodb_available():
+            try:
+                # Save all users to MongoDB
+                for user_id, user_data in users_db.items():
+                    user_doc = {
+                        'user_id': int(user_id),
+                        'username': user_data.get('username', ''),
+                        'first_name': user_data.get('first_name', ''),
+                        'last_name': user_data.get('last_name', ''),
+                        'join_date': user_data.get('join_date', datetime.now()),
+                        'last_active': datetime.now(),
+                        'message_count': user_data.get('message_count', 0),
+                        'status': 'active'
+                    }
+                    
+                    mongo_db.users.update_one(
+                        {'user_id': int(user_id)},
+                        {'$set': user_doc},
+                        upsert=True
+                    )
+                
+                # Save all channels to MongoDB
+                for channel_id, channel_data in channels_db.items():
+                    channel_doc = {
+                        'channel_id': channel_id,
+                        'name': channel_data.get('name', ''),
+                        'username': channel_data.get('username', ''),
+                        'url': channel_data.get('url', ''),
+                        'add_date': channel_data.get('add_date', datetime.now()),
+                        'active': channel_data.get('active', True),
+                        'added_by': channel_data.get('added_by', ADMIN_ID)
+                    }
+                    
+                    mongo_db.channels.update_one(
+                        {'channel_id': channel_id},
+                        {'$set': channel_doc},
+                        upsert=True
+                    )
+                
+                # Movies are saved individually during upload process
+                mongodb_success = True
+                logger.info(f"✅ MongoDB auto-save: {len(users_db)} users, {len(channels_db)} channels")
+                
+            except Exception as e:
+                logger.error(f"❌ MongoDB auto-save error: {e}")
         
-        # Save movies  
-        with open('file_ids.json', 'w', encoding='utf-8') as f:
-            json.dump(movies_db, f, ensure_ascii=False, indent=2)
-        
-        # Save channels
-        with open('channels.json', 'w', encoding='utf-8') as f:
-            json.dump(channels_db, f, ensure_ascii=False, indent=2)
-        
-        # Create backup files for safety
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
-        with open(f'backup_users_{timestamp}.json', 'w', encoding='utf-8') as f:
-            json.dump(users_db, f, ensure_ascii=False, indent=2)
+        # Priority 2: Save to files (backup)
+        file_success = False
+        try:
+            # Save users
+            with open('users.json', 'w', encoding='utf-8') as f:
+                json.dump(users_db, f, ensure_ascii=False, indent=2)
             
-        with open(f'backup_movies_{timestamp}.json', 'w', encoding='utf-8') as f:
-            json.dump(movies_db, f, ensure_ascii=False, indent=2)
+            # Save movies  
+            with open('file_ids.json', 'w', encoding='utf-8') as f:
+                json.dump(movies_db, f, ensure_ascii=False, indent=2)
             
-        logger.info(f"💾 Auto-save completed: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
-        return True
+            # Save channels
+            with open('channels.json', 'w', encoding='utf-8') as f:
+                json.dump(channels_db, f, ensure_ascii=False, indent=2)
+            
+            file_success = True
+            logger.info(f"✅ File auto-save: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
+            
+        except Exception as e:
+            logger.error(f"❌ File auto-save error: {e}")
+        
+        # Create periodic backups
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+            with open(f'backup_users_{timestamp}.json', 'w', encoding='utf-8') as f:
+                json.dump(users_db, f, ensure_ascii=False, indent=2)
+                
+            with open(f'backup_movies_{timestamp}.json', 'w', encoding='utf-8') as f:
+                json.dump(movies_db, f, ensure_ascii=False, indent=2)
+                
+        except Exception as e:
+            logger.error(f"❌ Backup creation error: {e}")
+        
+        return mongodb_success or file_success
         
     except Exception as e:
         logger.error(f"❌ Auto-save error: {e}")
@@ -229,6 +289,48 @@ def save_user_to_mongodb(user_data):
         logger.error(f"❌ MongoDB user save error: {e}")
         return False
 
+def save_channel_to_mongodb(channel_data):
+    """Save channel to MongoDB"""
+    try:
+        if not is_mongodb_available():
+            return False
+            
+        channel_doc = {
+            'channel_id': channel_data['channel_id'],
+            'name': channel_data.get('name', ''),
+            'username': channel_data.get('username', ''),
+            'url': channel_data.get('url', ''),
+            'add_date': channel_data.get('add_date', datetime.now()),
+            'active': channel_data.get('active', True),
+            'added_by': channel_data.get('added_by', ADMIN_ID)
+        }
+        
+        # Upsert channel (update if exists, insert if not)
+        mongo_db.channels.update_one(
+            {'channel_id': channel_data['channel_id']},
+            {'$set': channel_doc},
+            upsert=True
+        )
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ MongoDB channel save error: {e}")
+        return False
+
+def get_all_channels_from_mongodb():
+    """Get all channels from MongoDB"""
+    try:
+        if not is_mongodb_available():
+            return []
+            
+        channels = list(mongo_db.channels.find({'active': True}))
+        return channels
+        
+    except Exception as e:
+        logger.error(f"❌ MongoDB get channels error: {e}")
+        return []
+
 # Auto-save enhanced system
 def enhanced_auto_save():
     """Enhanced auto-save with MongoDB integration"""
@@ -262,46 +364,88 @@ def enhanced_auto_save():
         return False
 
 def load_data():
-    """Professional data loading with error handling"""
+    """Professional data loading with MongoDB priority"""
     global users_db, movies_db, channels_db
     
     try:
-        # First try to load from environment variables
+        # Initialize empty dictionaries
+        users_db = {}
+        movies_db = {}
+        channels_db = {}
+        
+        # Priority 1: Load from MongoDB if available
+        if is_mongodb_available():
+            try:
+                # Load users from MongoDB
+                mongodb_users = mongo_db.users.find({'status': 'active'})
+                for user in mongodb_users:
+                    user_id = str(user['user_id'])
+                    users_db[user_id] = {
+                        'user_id': user['user_id'],
+                        'username': user.get('username', ''),
+                        'first_name': user.get('first_name', ''),
+                        'last_name': user.get('last_name', ''),
+                        'join_date': user.get('join_date', datetime.now().isoformat()),
+                        'last_active': user.get('last_active', datetime.now().isoformat()),
+                        'message_count': user.get('message_count', 0),
+                        'active': True
+                    }
+                logger.info(f"✅ Loaded {len(users_db)} users from MongoDB")
+                
+                # Load movies from MongoDB
+                mongodb_movies = mongo_db.movies.find({'status': 'active'})
+                for movie in mongodb_movies:
+                    code = movie['code']
+                    movies_db[code] = {
+                        'file_id': movie['file_id'],
+                        'title': movie.get('title', ''),
+                        'file_name': movie.get('file_name', ''),
+                        'file_size': movie.get('file_size', 0),
+                        'additional_info': movie.get('additional_info', ''),
+                        'upload_date': movie.get('upload_date', datetime.now().isoformat()),
+                        'uploaded_by': movie.get('uploaded_by', ADMIN_ID)
+                    }
+                logger.info(f"✅ Loaded {len(movies_db)} movies from MongoDB")
+                
+                # Load channels from MongoDB
+                mongodb_channels = mongo_db.channels.find({'active': True})
+                for channel in mongodb_channels:
+                    channel_id = str(channel['channel_id'])
+                    channels_db[channel_id] = {
+                        'name': channel.get('name', ''),
+                        'username': channel.get('username', ''),
+                        'url': channel.get('url', ''),
+                        'add_date': channel.get('add_date', datetime.now().isoformat()),
+                        'active': channel.get('active', True),
+                        'added_by': channel.get('added_by', ADMIN_ID)
+                    }
+                logger.info(f"✅ Loaded {len(channels_db)} channels from MongoDB")
+                
+            except Exception as e:
+                logger.error(f"❌ MongoDB loading error: {e}")
+                # Fall back to file loading
+        
+        # Priority 2: Load from environment variables (backup)
         load_from_environment()
         
-        # Then load from files (as backup)
-        if os.path.exists('users.json'):
+        # Priority 3: Load from files (final backup)
+        if os.path.exists('users.json') and len(users_db) == 0:
             with open('users.json', 'r', encoding='utf-8') as f:
                 file_users = json.load(f)
-                # Merge with environment data
-                for k, v in file_users.items():
-                    if k not in users_db:
-                        users_db[k] = v
-                logger.info(f"✅ Loaded {len(file_users)} users from file")
-        else:
-            users_db = users_db or {}
+                users_db.update(file_users)
+                logger.info(f"✅ Loaded {len(file_users)} users from file (backup)")
             
-        # Load movies
-        if os.path.exists('file_ids.json'):
+        if os.path.exists('file_ids.json') and len(movies_db) == 0:
             with open('file_ids.json', 'r', encoding='utf-8') as f:
                 file_movies = json.load(f)
-                for k, v in file_movies.items():
-                    if k not in movies_db:
-                        movies_db[k] = v
-                logger.info(f"✅ Loaded {len(file_movies)} movies from file")
-        else:
-            movies_db = movies_db or {}
+                movies_db.update(file_movies)
+                logger.info(f"✅ Loaded {len(file_movies)} movies from file (backup)")
             
-        # Load channels
-        if os.path.exists('channels.json'):
+        if os.path.exists('channels.json') and len(channels_db) == 0:
             with open('channels.json', 'r', encoding='utf-8') as f:
                 file_channels = json.load(f)
-                for k, v in file_channels.items():
-                    if k not in channels_db:
-                        channels_db[k] = v
-                logger.info(f"✅ Loaded {len(file_channels)} channels from file")
-        else:
-            channels_db = channels_db or {}
+                channels_db.update(file_channels)
+                logger.info(f"✅ Loaded {len(file_channels)} channels from file (backup)")
             
         logger.info(f"📊 Total loaded: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
         return True
@@ -452,7 +596,7 @@ def check_user_subscription(user_id, channel_id):
 
 # User Management
 def save_user(user_info, user_id):
-    """Professional user saving"""
+    """Professional user saving with MongoDB integration"""
     try:
         user_data = {
             'user_id': user_id,
@@ -460,13 +604,21 @@ def save_user(user_info, user_id):
             'last_name': user_info.get('last_name', ''),
             'username': user_info.get('username', ''),
             'language_code': user_info.get('language_code', ''),
-            'join_date': datetime.now().isoformat(),
+            'join_date': users_db.get(str(user_id), {}).get('join_date', datetime.now().isoformat()),
             'last_seen': datetime.now().isoformat(),
             'message_count': users_db.get(str(user_id), {}).get('message_count', 0) + 1,
             'is_active': True
         }
         
+        # Save to memory (for immediate access)
         users_db[str(user_id)] = user_data
+        
+        # Save to MongoDB if available
+        if is_mongodb_available():
+            save_user_to_mongodb(user_data)
+            logger.info(f"👤 User saved to MongoDB: {user_id}")
+        
+        # Auto-save to files (backup)
         auto_save_data()
         
         logger.info(f"👤 User saved/updated: {user_id}")
@@ -1147,15 +1299,38 @@ def handle_movie_request(chat_id, user_id, code):
         
         logger.info(f"🎬 Movie request: user={user_id}, code='{original_code}'")
         
-        # Search for movie
+        # Search for movie in both MongoDB and local storage
         movie_data = None
         found_code = None
         
+        # First, search in local storage (faster)
         for search_code in [clean_code, code_with_hash, original_code]:
             if search_code in movies_db:
                 movie_data = movies_db[search_code]
                 found_code = search_code
                 break
+        
+        # If not found in local storage, search in MongoDB
+        if not movie_data and is_mongodb_available():
+            try:
+                for search_code in [clean_code, code_with_hash, original_code]:
+                    mongo_movie = get_movie_from_mongodb(search_code)
+                    if mongo_movie:
+                        movie_data = {
+                            'file_id': mongo_movie['file_id'],
+                            'title': mongo_movie.get('title', ''),
+                            'file_name': mongo_movie.get('file_name', ''),
+                            'file_size': mongo_movie.get('file_size', 0),
+                            'additional_info': mongo_movie.get('additional_info', ''),
+                            'upload_date': mongo_movie.get('upload_date', ''),
+                        }
+                        found_code = search_code
+                        # Add to local storage for faster future access
+                        movies_db[search_code] = movie_data
+                        logger.info(f"🔄 Movie loaded from MongoDB to cache: {search_code}")
+                        break
+            except Exception as e:
+                logger.error(f"❌ MongoDB search error: {e}")
         
         if movie_data:
             # Movie found - send it
@@ -1936,6 +2111,7 @@ def handle_add_channel_session(chat_id, message):
             
             # Save channel
             channel_data = {
+                'channel_id': str(channel_id),
                 'name': channel_name,
                 'username': channel_username,
                 'url': f"https://t.me/{channel_username[1:]}" if channel_username.startswith('@') else '#',
@@ -1944,7 +2120,15 @@ def handle_add_channel_session(chat_id, message):
                 'added_by': user_id
             }
             
+            # Save to memory
             channels_db[str(channel_id)] = channel_data
+            
+            # Save to MongoDB if available
+            if is_mongodb_available():
+                save_channel_to_mongodb(channel_data)
+                logger.info(f"📺 Channel saved to MongoDB: {channel_id}")
+            
+            # Auto-save to files (backup)
             auto_save_data()
             
             # Clean up session
@@ -2757,6 +2941,7 @@ def handle_accept_suggested_name(chat_id, user_id, callback_id):
         
         # Save channel
         channel_data = {
+            'channel_id': str(channel_id),
             'name': channel_name,
             'username': channel_username,
             'url': f"https://t.me/{channel_username[1:]}" if channel_username.startswith('@') else '#',
@@ -2765,7 +2950,14 @@ def handle_accept_suggested_name(chat_id, user_id, callback_id):
             'added_by': user_id
         }
         
+        # Save to memory
         channels_db[str(channel_id)] = channel_data
+        
+        # Save to MongoDB if available
+        if is_mongodb_available():
+            save_channel_to_mongodb(channel_data)
+        
+        # Auto-save to files (backup)
         auto_save_data()
         
         # Clean up session
