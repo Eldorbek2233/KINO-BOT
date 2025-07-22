@@ -8,7 +8,7 @@ BOT_TOKEN=8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk
 ADMIN_ID=5542016161
 
 # MongoDB Connection - Sizning haqiqiy connection string
-MONGODB_URI=mongodb+srv://eldorbekxakimxujayev4:7cszqUNVfQ6TPGzl@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster
+MONGODB_URI=mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster
 
 # Database Name
 DB_NAME=kinobot

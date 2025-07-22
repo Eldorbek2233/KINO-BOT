@@ -31,7 +31,7 @@ TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk")
 ADMIN_ID = int(os.getenv('ADMIN_ID', 5542016161))
 
 # MongoDB Configuration
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb+srv://eldorbekxakimxujayev4:7cszqUNVFq6TPGz1@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster')
+MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster')
 DB_NAME = os.getenv('DB_NAME', 'kinobot')
 
 # MongoDB Connection
