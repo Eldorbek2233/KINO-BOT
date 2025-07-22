@@ -2359,15 +2359,18 @@ def check_all_subscriptions(user_id):
             if not channel_data.get('active', True):
                 continue  # Skip inactive channels
             
-            # Check subscription (would need Telegram API call in real implementation)
-            # For now, return True to avoid blocking
-            pass
+            # Check subscription using Telegram API
+            is_subscribed = check_user_subscription(user_id, channel_id)
+            if not is_subscribed:
+                logger.info(f"❌ User {user_id} not subscribed to channel {channel_id}")
+                return False
         
+        logger.info(f"✅ User {user_id} subscribed to all channels")
         return True
         
     except Exception as e:
         logger.error(f"❌ Subscription check error: {e}")
-        return True  # Default to allowing access
+        return False  # Default to requiring subscription on error
 
 def send_subscription_message(chat_id, user_id):
     """Send subscription requirement message"""
