@@ -167,17 +167,38 @@ def auto_save_data():
         # Priority 2: Save to files (backup)
         file_success = False
         try:
+            # Prepare serializable data for JSON files
+            def convert_datetime_to_string(data):
+                """Convert datetime objects to ISO format strings for JSON serialization"""
+                if isinstance(data, dict):
+                    return {k: convert_datetime_to_string(v) for k, v in data.items()}
+                elif isinstance(data, list):
+                    return [convert_datetime_to_string(item) for item in data]
+                elif isinstance(data, datetime):
+                    return data.isoformat()
+                else:
+                    return data
+            
+            # Convert users data for JSON serialization
+            users_json = convert_datetime_to_string(users_db)
+            
+            # Convert channels data for JSON serialization  
+            channels_json = convert_datetime_to_string(channels_db)
+            
+            # Convert movies data for JSON serialization
+            movies_json = convert_datetime_to_string(movies_db)
+            
             # Save users
             with open('users.json', 'w', encoding='utf-8') as f:
-                json.dump(users_db, f, ensure_ascii=False, indent=2)
+                json.dump(users_json, f, ensure_ascii=False, indent=2)
             
             # Save movies  
             with open('file_ids.json', 'w', encoding='utf-8') as f:
-                json.dump(movies_db, f, ensure_ascii=False, indent=2)
+                json.dump(movies_json, f, ensure_ascii=False, indent=2)
             
             # Save channels
             with open('channels.json', 'w', encoding='utf-8') as f:
-                json.dump(channels_db, f, ensure_ascii=False, indent=2)
+                json.dump(channels_json, f, ensure_ascii=False, indent=2)
             
             file_success = True
             logger.info(f"✅ File auto-save: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
@@ -189,11 +210,12 @@ def auto_save_data():
         try:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
+            # Use converted data for backups too
             with open(f'backup_users_{timestamp}.json', 'w', encoding='utf-8') as f:
-                json.dump(users_db, f, ensure_ascii=False, indent=2)
+                json.dump(convert_datetime_to_string(users_db), f, ensure_ascii=False, indent=2)
                 
             with open(f'backup_movies_{timestamp}.json', 'w', encoding='utf-8') as f:
-                json.dump(movies_db, f, ensure_ascii=False, indent=2)
+                json.dump(convert_datetime_to_string(movies_db), f, ensure_ascii=False, indent=2)
                 
         except Exception as e:
             logger.error(f"❌ Backup creation error: {e}")
