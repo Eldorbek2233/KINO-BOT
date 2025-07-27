@@ -1308,6 +1308,14 @@ def handle_callback_query(callback_query):
         elif data == 'help_user':
             handle_help_user(chat_id, user_id)
             
+        elif data == 'delete_movies':
+            # Handle movie deletion menu directly
+            if user_id == ADMIN_ID:
+                handle_delete_movies_menu(chat_id, user_id)
+                answer_callback_query(callback_id, "🗑 O'chirish menyusi")
+            else:
+                answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            
         else:
             # Handle all remaining callbacks through admin handler
             try:
@@ -2627,7 +2635,7 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             # Upload callbacks
             'start_upload': lambda: handle_start_upload(chat_id, user_id),
             'delete_movies': lambda: handle_delete_movies_menu(chat_id, user_id),
-            'admin_movies_list': lambda: handle_admin_movies_list(chat_id, user_id),
+            'admin_movies_list': lambda: handle_admin_movies_list(chat_id, user_id, callback_id),
             'movies_stats': lambda: handle_movies_statistics(chat_id, user_id),
             'movies_backup': lambda: handle_movies_backup(chat_id, user_id),
             'upload_stats': lambda: handle_upload_statistics(chat_id, user_id),
