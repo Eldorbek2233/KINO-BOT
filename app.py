@@ -1056,7 +1056,73 @@ def handle_callback_query(callback_query):
                 send_message(chat_id, text, keyboard)
                 answer_callback_query(callback_id, "💡 Kino kodini yuboring")
             
-        elif data.startswith('delete_movie_'):
+        elif data == 'add_channel':
+            # Start channel addition process
+            if user_id == ADMIN_ID:
+                upload_sessions[user_id] = {
+                    'type': 'add_channel',
+                    'step': 'waiting_channel_id',
+                    'start_time': datetime.now().isoformat()
+                }
+                
+                text = """➕ <b>YANGI KANAL QO'SHISH</b>
+
+📝 <b>Kanal ID kiriting:</b>
+
+💡 <b>Maslahatlar:</b>
+• Minus belgisi bilan: <code>-1001234567890</code>
+• Yoki username: <code>@channel_username</code>
+• Public kanallar uchun: <code>tarjima_kino_movie</code>
+
+🎯 <b>Kanal ID/username yuboring:</b>"""
+                
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '❌ Bekor qilish', 'callback_data': 'channels_menu'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, text, keyboard)
+                answer_callback_query(callback_id, "📝 Kanal ID kiriting")
+            else:
+                answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+        
+        elif data == 'list_channels':
+            # Show all channels
+            if user_id == ADMIN_ID:
+                handle_list_all_channels(chat_id, user_id, callback_id)
+            else:
+                answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+        
+        elif data == 'test_subscription':
+            # Test subscription system with admin
+            if user_id == ADMIN_ID:
+                if check_all_subscriptions(user_id):
+                    answer_callback_query(callback_id, "✅ Siz barcha kanallarga obuna bo'lgansiz!")
+                else:
+                    answer_callback_query(callback_id, "❌ Ba'zi kanallarga obuna bo'lmadingiz!", True)
+            else:
+                if check_all_subscriptions(user_id):
+                    answer_callback_query(callback_id, "✅ Barcha kanallarga obuna bo'lgansiz!")
+                else:
+                    send_subscription_message(chat_id, user_id)
+                    answer_callback_query(callback_id, "❌ Kanallarga obuna bo'ling!", True)
+                    
+        elif data.startswith('start_upload'):
+            # Start movie upload process  
+            if user_id == ADMIN_ID:
+                handle_start_upload(chat_id, user_id, callback_id)
+            else:
+                answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+                
+        elif data == 'admin_movies_list':
+            # Show admin movies list
+            if user_id == ADMIN_ID:
+                handle_admin_movies_list(chat_id, user_id, callback_id)
+            else:
+                answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
             # Handle single movie deletion
             if user_id == ADMIN_ID:
                 movie_code = data.replace('delete_movie_', '')
@@ -1692,10 +1758,10 @@ def handle_upload_menu(chat_id, user_id):
         
         text = f"""🎬 <b>PROFESSIONAL KINO BOSHQARUV TIZIMI</b>
 
-� <b>Kino statistikasi:</b>
+📊 <b>Kino statistikasi:</b>
 • Jami kinolar: <code>{total_movies}</code> ta
 • Oxirgi kinolar: <code>{recent_display}</code>
-• MongoDB: <code>{'✅ Ulanган' if is_mongodb_available() else '❌ O\'chiq'}</code>
+• MongoDB: <code>{'✅ Ulangan' if is_mongodb_available() else '❌ O\'chiq'}</code>
 
 ⚙️ <b>Boshqaruv funksiyalari:</b>
 • Yangi kino yuklash
@@ -1703,12 +1769,12 @@ def handle_upload_menu(chat_id, user_id):
 • Metadata tahrirlash
 • Backup tizimi
 
-� <b>Tanlang:</b>"""
+🎯 <b>Tanlang:</b>"""
 
         keyboard = {
             'inline_keyboard': [
                 [
-                    {'text': '� Yangi Kino Yuklash', 'callback_data': 'start_upload'},
+                    {'text': '🎬 Yangi Kino Yuklash', 'callback_data': 'start_upload'},
                     {'text': '🗑 Kino O\'chirish', 'callback_data': 'delete_movies'}
                 ],
                 [
@@ -1725,7 +1791,6 @@ def handle_upload_menu(chat_id, user_id):
             ]
         }
         
-        upload_sessions[user_id] = {'status': 'waiting_video', 'start_time': datetime.now().isoformat()}
         send_message(chat_id, text, keyboard)
         
     except Exception as e:
@@ -1739,7 +1804,7 @@ def handle_broadcast_menu(chat_id, user_id):
             send_message(chat_id, "❌ Admin huquqi kerak!")
             return
         
-        active_users = len([u for u in users_db.values() if u.get('active', True)])
+        active_users = len([u for u in users_db.values() if u.get('is_active', True)])
         
         text = f"""📣 <b>PROFESSIONAL REKLAMA TIZIMI</b>
 
@@ -1747,6 +1812,329 @@ def handle_broadcast_menu(chat_id, user_id):
 • Jami: <code>{len(users_db)}</code> ta
 • Faol: <code>{active_users}</code> ta
 • Bloklangan: <code>{len(users_db) - active_users}</code> ta
+
+📊 <b>Broadcast statistikasi:</b>
+• Faol sessiyalar: <code>{len(broadcast_sessions)}</code> ta
+• So'nggi broadcast: <code>Hech qachon</code>
+
+💡 <b>Xabar turini tanlang:</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '📝 Matn Xabar', 'callback_data': 'broadcast_text'},
+                    {'text': '🖼 Rasm + Matn', 'callback_data': 'broadcast_photo'}
+                ],
+                [
+                    {'text': '🎬 Video + Matn', 'callback_data': 'broadcast_video'},
+                    {'text': '📄 Fayl + Matn', 'callback_data': 'broadcast_document'}
+                ],
+                [
+                    {'text': '📊 Broadcast Hisoboti', 'callback_data': 'broadcast_stats'},
+                    {'text': '⏰ Rejalashtirilgan', 'callback_data': 'scheduled_broadcasts'}
+                ],
+                [
+                    {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Broadcast menu error: {e}")
+        send_message(chat_id, "❌ Reklama tizimida xatolik!")
+
+def handle_channels_menu(chat_id, user_id):
+    """Professional channel management system"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Admin huquqi kerak!")
+            return
+        
+        total_channels = len(channels_db)
+        active_channels = len([c for c in channels_db.values() if c.get('active', True)])
+        
+        text = f"""📺 <b>PROFESSIONAL KANAL BOSHQARUVI</b>
+
+📊 <b>Kanal statistikasi:</b>
+• Jami kanallar: <code>{total_channels}</code> ta
+• Faol kanallar: <code>{active_channels}</code> ta
+• Nofaol kanallar: <code>{total_channels - active_channels}</code> ta
+
+📋 <b>Mavjud kanallar:</b>
+"""
+        
+        if channels_db:
+            for channel_id, channel_data in list(channels_db.items())[:5]:
+                status = "✅" if channel_data.get('active', True) else "❌"
+                name = channel_data.get('name', f'Kanal {channel_id}')
+                text += f"• {status} {name} - <code>{channel_id}</code>\n"
+        else:
+            text += "• Hech qanday kanal qo'shilmagan\n"
+        
+        text += f"""
+⚙️ <b>Boshqaruv funksiyalari:</b>
+• Yangi kanal qo'shish
+• Kanallarni o'chirish/faollashtirish
+• Azolik tekshiruvi
+• Kanal statistikasi
+
+🎯 <b>Tanlang:</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '➕ Yangi Kanal', 'callback_data': 'add_channel'},
+                    {'text': '📋 Barcha Kanallar', 'callback_data': 'list_channels'}
+                ],
+                [
+                    {'text': '🔧 Sozlamalar', 'callback_data': 'channel_settings'},
+                    {'text': '📊 Statistika', 'callback_data': 'channel_stats'}
+                ],
+                [
+                    {'text': '✅ Azolik Tekshiruvi', 'callback_data': 'test_subscription'},
+                    {'text': '🔄 Yangilash', 'callback_data': 'channels_menu'}
+                ],
+                [
+                    {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Channels menu error: {e}")
+        send_message(chat_id, "❌ Kanal boshqaruvida xatolik!")
+
+def handle_users_menu(chat_id, user_id):
+    """Professional user management system"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Admin huquqi kerak!")
+            return
+        
+        # Calculate user statistics
+        current_time = datetime.now()
+        day_ago = current_time.timestamp() - 86400
+        week_ago = current_time.timestamp() - (86400 * 7)
+        
+        active_24h = 0
+        active_week = 0
+        total_messages = 0
+        blocked_users = 0
+        
+        for user_data in users_db.values():
+            try:
+                last_seen = datetime.fromisoformat(user_data.get('last_seen', ''))
+                if last_seen.timestamp() > day_ago:
+                    active_24h += 1
+                if last_seen.timestamp() > week_ago:
+                    active_week += 1
+                total_messages += user_data.get('message_count', 0)
+                if not user_data.get('is_active', True):
+                    blocked_users += 1
+            except:
+                pass
+        
+        text = f"""👥 <b>PROFESSIONAL FOYDALANUVCHI BOSHQARUVI</b>
+
+📊 <b>Foydalanuvchi statistikasi:</b>
+• Jami foydalanuvchilar: <code>{len(users_db)}</code> ta
+• 24 soat ichida faol: <code>{active_24h}</code> ta
+• Hafta ichida faol: <code>{active_week}</code> ta
+• Bloklangan: <code>{blocked_users}</code> ta
+• Jami xabarlar: <code>{total_messages}</code> ta
+
+📈 <b>Eng faol foydalanuvchilar:</b>
+"""
+        
+        # Top 5 active users
+        sorted_users = sorted(users_db.items(), key=lambda x: x[1].get('message_count', 0), reverse=True)[:5]
+        for i, (user_id, user_data) in enumerate(sorted_users, 1):
+            first_name = user_data.get('first_name', 'No name')
+            message_count = user_data.get('message_count', 0)
+            text += f"{i}. {first_name} - <code>{message_count}</code> xabar\n"
+        
+        text += f"""
+⚙️ <b>Boshqaruv funksiyalari:</b>
+• Foydalanuvchilarni qidirish
+• Bloklash/faollashtirish
+• Statistika eksport
+• Broadcast yuborish
+
+🎯 <b>Tanlang:</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔍 Foydalanuvchi Qidirish', 'callback_data': 'search_users'},
+                    {'text': '📋 Barcha Foydalanuvchilar', 'callback_data': 'list_all_users'}
+                ],
+                [
+                    {'text': '📊 Batafsil Statistika', 'callback_data': 'detailed_user_stats'},
+                    {'text': '📤 Eksport', 'callback_data': 'export_users'}
+                ],
+                [
+                    {'text': '🚫 Bloklangan', 'callback_data': 'blocked_users'},
+                    {'text': '✅ Faol Foydalanuvchilar', 'callback_data': 'active_users'}
+                ],
+                [
+                    {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Users menu error: {e}")
+        send_message(chat_id, "❌ Foydalanuvchi boshqaruvida xatolik!")
+
+def handle_system_menu(chat_id, user_id):
+    """Professional system management"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Admin huquqi kerak!")
+            return
+        
+        # System statistics
+        import psutil
+        import sys
+        
+        cpu_percent = psutil.cpu_percent(interval=1)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        
+        uptime_seconds = int(time.time())
+        
+        text = f"""🔧 <b>PROFESSIONAL TIZIM BOSHQARUVI</b>
+
+💻 <b>Tizim ma'lumotlari:</b>
+• Platform: <code>Render.com</code>
+• Python: <code>{sys.version.split()[0]}</code>
+• CPU: <code>{cpu_percent}%</code>
+• RAM: <code>{memory.percent}%</code> ({memory.used // 1024 // 1024} MB / {memory.total // 1024 // 1024} MB)
+• Disk: <code>{disk.percent}%</code>
+
+🔄 <b>Bot holati:</b>
+• Uptime: <code>{uptime_seconds} sekund</code>
+• MongoDB: <code>{'✅ Ulangan' if is_mongodb_available() else '❌ O\'chiq'}</code>
+• Webhook: <code>✅ Faol</code>
+• Auto-save: <code>✅ Faol</code>
+• Keep-alive: <code>✅ Faol</code>
+
+📊 <b>Ma'lumotlar bazasi:</b>
+• Foydalanuvchilar: <code>{len(users_db)}</code>
+• Kinolar: <code>{len(movies_db)}</code>
+• Kanallar: <code>{len(channels_db)}</code>
+• Faol sessiyalar: <code>{len(upload_sessions) + len(broadcast_sessions)}</code>
+
+🎯 <b>Tizim boshqaruvi:</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔄 Restart Bot', 'callback_data': 'restart_bot'},
+                    {'text': '💾 Backup Yaratish', 'callback_data': 'create_backup'}
+                ],
+                [
+                    {'text': '🗑 Cache Tozalash', 'callback_data': 'clear_cache'},
+                    {'text': '📊 Log Ko\'rish', 'callback_data': 'view_logs'}
+                ],
+                [
+                    {'text': '⚙️ Sozlamalar', 'callback_data': 'bot_settings'},
+                    {'text': '🔧 Maintenance', 'callback_data': 'maintenance_mode'}
+                ],
+                [
+                    {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ System menu error: {e}")
+        send_message(chat_id, "❌ Tizim boshqaruvida xatolik!")
+
+def handle_help_admin(chat_id, user_id):
+    """Professional admin help system"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Admin huquqi kerak!")
+            return
+        
+        text = f"""ℹ️ <b>PROFESSIONAL ADMIN YORDAM TIZIMI</b>
+
+👑 <b>Admin Panel xususiyatlari:</b>
+
+🎬 <b>Kino Boshqaruvi:</b>
+• Video yuklash va metadata qo'shish
+• Kino kodlari bilan boshqarish
+• Avtomatik MongoDB saqlash
+• Bulk import/export
+
+📣 <b>Reklama Tizimi:</b>
+• Barcha foydalanuvchilarga xabar
+• Matn, rasm, video broadcast
+• Rejalashtirilgan xabarlar
+• Broadcast statistikasi
+
+📺 <b>Kanal Boshqaruvi:</b>
+• Majburiy azolik tizimi
+• Kanal qo'shish/o'chirish
+• Azolik tekshiruvi
+• Kanal statistikasi
+
+👥 <b>Foydalanuvchi Boshqaruvi:</b>
+• Foydalanuvchi statistikasi
+• Qidiruv va filtrlash
+• Bloklash/faollashtirish
+• Ma'lumot eksport
+
+🔧 <b>Tizim Boshqaruvi:</b>
+• Server monitoring
+• Database backup
+• Cache management
+• Maintenance mode
+
+💡 <b>Tezkor buyruqlar:</b>
+• <code>/admin</code> - Admin panel
+• <code>/stats</code> - Statistika
+• Video yuborish - Avtomatik yuklash
+• Kino kodi - Kino qidirish
+
+📞 <b>Texnik yordam:</b>
+• GitHub: Eldorbek2233/KINO-BOT
+• MongoDB Atlas dashboard
+• Render.com deployment
+• Professional logging system
+
+🎭 <b>Ultimate Professional Kino Bot V3.0</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '📚 Qo\'llanma', 'callback_data': 'admin_manual'},
+                    {'text': '🔧 API Docs', 'callback_data': 'api_docs'}
+                ],
+                [
+                    {'text': '🐛 Bug Report', 'callback_data': 'bug_report'},
+                    {'text': '💡 Feature Request', 'callback_data': 'feature_request'}
+                ],
+                [
+                    {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Admin help error: {e}")
+        send_message(chat_id, "❌ Admin yordam tizimida xatolik!")
 
 📢 <b>Reklama turlari:</b>
 • 📝 Matn xabari
@@ -4725,6 +5113,861 @@ def handle_confirm_delete_all_movies(chat_id, user_id, callback_id):
     except Exception as e:
         logger.error(f"❌ Confirm delete all error: {e}")
         answer_callback_query(callback_id, "❌ O'chirishda xatolik!", True)
+
+# Additional admin functions for complete functionality
+def handle_list_all_channels(chat_id, user_id, callback_id):
+    """Show all channels with management options"""
+    try:
+        if not channels_db:
+            text = """📺 <b>KANAL RO'YXATI</b>
+
+❌ <b>Hech qanday kanal qo'shilmagan!</b>
+
+💡 Yangi kanal qo'shish uchun "➕ Yangi Kanal" tugmasini bosing."""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '➕ Yangi Kanal', 'callback_data': 'add_channel'},
+                        {'text': '🔙 Orqaga', 'callback_data': 'channels_menu'}
+                    ]
+                ]
+            }
+        else:
+            text = f"""📺 <b>BARCHA KANALLAR RO'YXATI</b>
+
+📊 <b>Jami:</b> <code>{len(channels_db)}</code> ta kanal
+
+"""
+            
+            keyboard = {'inline_keyboard': []}
+            
+            for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
+                status = "✅" if channel_data.get('active', True) else "❌"
+                name = channel_data.get('name', f'Kanal {i}')
+                username = channel_data.get('username', '')
+                
+                text += f"{i}. {status} <b>{name}</b>\n"
+                text += f"   ID: <code>{channel_id}</code>\n"
+                if username:
+                    text += f"   @{username}\n"
+                text += "\n"
+                
+                # Add management buttons (2 per row)
+                if i % 2 == 1:
+                    keyboard['inline_keyboard'].append([])
+                
+                keyboard['inline_keyboard'][-1].append({
+                    'text': f"{'🔧' if channel_data.get('active', True) else '✅'} {name[:10]}",
+                    'callback_data': f"manage_channel_{channel_id}"
+                })
+            
+            # Add navigation buttons
+            keyboard['inline_keyboard'].extend([
+                [
+                    {'text': '➕ Yangi Kanal', 'callback_data': 'add_channel'},
+                    {'text': '🔄 Yangilash', 'callback_data': 'list_channels'}
+                ],
+                [
+                    {'text': '🔙 Kanallar', 'callback_data': 'channels_menu'}
+                ]
+            ])
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"📺 {len(channels_db)} ta kanal")
+        
+    except Exception as e:
+        logger.error(f"❌ List channels error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik yuz berdi!", True)
+
+def handle_start_upload(chat_id, user_id, callback_id):
+    """Start movie upload process"""
+    try:
+        upload_sessions[user_id] = {
+            'type': 'movie_upload',
+            'step': 'waiting_video',
+            'start_time': datetime.now().isoformat()
+        }
+        
+        text = """🎬 <b>YANGI KINO YUKLASH</b>
+
+📹 <b>Video fayl yuboring:</b>
+
+💡 <b>Qo'llab-quvvatlanadigan formatlar:</b>
+• MP4, AVI, MKV, MOV
+• Maksimal hajm: 2GB
+• Sifat: HD tavsiya etiladi
+
+📝 <b>Keyingi bosqichlar:</b>
+1. Video yuklash
+2. Kino kodi kiriting
+3. Sarlavha qo'shish
+4. Qo'shimcha ma'lumot (ixtiyoriy)
+5. Tasdiqlash va saqlash
+
+🎯 <b>Video faylni yuboring:</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '❌ Bekor qilish', 'callback_data': 'upload_movie'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, "📹 Video yuboring")
+        
+    except Exception as e:
+        logger.error(f"❌ Start upload error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik yuz berdi!", True)
+
+def handle_admin_movies_list(chat_id, user_id, callback_id):
+    """Show admin movies list with management options"""
+    try:
+        if not movies_db:
+            text = """🎬 <b>KINOLAR RO'YXATI</b>
+
+❌ <b>Hech qanday kino yuklanmagan!</b>
+
+💡 Yangi kino yuklash uchun "🎬 Yangi Kino Yuklash" tugmasini bosing."""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '🎬 Yangi Kino Yuklash', 'callback_data': 'start_upload'},
+                        {'text': '🔙 Orqaga', 'callback_data': 'upload_movie'}
+                    ]
+                ]
+            }
+        else:
+            # Show first 10 movies
+            movie_list = list(movies_db.items())[:10]
+            
+            text = f"""🎬 <b>KINOLAR RO'YXATI (ADMIN)</b>
+
+📊 <b>Jami kinolar:</b> <code>{len(movies_db)}</code> ta
+📋 <b>Ko'rsatilgan:</b> <code>{len(movie_list)}</code> ta
+
+"""
+            
+            keyboard = {'inline_keyboard': []}
+            
+            for i, (code, movie_data) in enumerate(movie_list, 1):
+                if isinstance(movie_data, str):
+                    title = f"Kino {code}"
+                else:
+                    title = movie_data.get('title', f"Kino {code}")
+                
+                text += f"{i}. <b>{code}</b> - {title[:30]}{'...' if len(title) > 30 else ''}\n"
+                
+                # Add buttons (2 per row)
+                if i % 2 == 1:
+                    keyboard['inline_keyboard'].append([])
+                
+                keyboard['inline_keyboard'][-1].append({
+                    'text': f"🎬 {code}",
+                    'callback_data': f"movie_{code}"
+                })
+            
+            # Add management buttons
+            keyboard['inline_keyboard'].extend([
+                [
+                    {'text': '🔍 Qidirish', 'callback_data': 'search_admin_movies'},
+                    {'text': '📊 Statistika', 'callback_data': 'movies_stats'}
+                ],
+                [
+                    {'text': '🗑 O\'chirish', 'callback_data': 'delete_movies'},
+                    {'text': '💾 Eksport', 'callback_data': 'export_movies'}
+                ],
+                [
+                    {'text': '🔙 Kino Boshqaruvi', 'callback_data': 'upload_movie'}
+                ]
+            ])
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"🎬 {len(movies_db)} ta kino")
+        
+    except Exception as e:
+        logger.error(f"❌ Admin movies list error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik yuz berdi!", True)
+
+def handle_upload_session(chat_id, message):
+    """Handle movie upload session"""
+    try:
+        user_id = message.get('from', {}).get('id')
+        
+        if user_id != ADMIN_ID or user_id not in upload_sessions:
+            return
+        
+        session = upload_sessions[user_id]
+        session_type = session.get('type')
+        
+        if session_type == 'movie_upload':
+            handle_movie_upload_session(chat_id, message, session)
+        elif session_type == 'add_channel':
+            handle_add_channel_session(chat_id, message)
+        
+    except Exception as e:
+        logger.error(f"❌ Upload session error: {e}")
+
+def handle_movie_upload_session(chat_id, message, session):
+    """Handle movie upload steps"""
+    try:
+        user_id = message.get('from', {}).get('id')
+        step = session.get('step')
+        
+        if step == 'waiting_video':
+            # Check if video is sent
+            if 'video' in message:
+                video = message['video']
+                file_id = video['file_id']
+                file_name = video.get('file_name', 'Unknown')
+                file_size = video.get('file_size', 0)
+                duration = video.get('duration', 0)
+                
+                # Save video info to session
+                session.update({
+                    'file_id': file_id,
+                    'file_name': file_name,
+                    'file_size': file_size,
+                    'duration': duration,
+                    'step': 'waiting_code'
+                })
+                
+                send_message(chat_id, f"""✅ <b>Video qabul qilindi!</b>
+
+📹 <b>Fayl ma'lumotlari:</b>
+• Nom: <code>{file_name}</code>
+• Hajm: <code>{file_size / 1024 / 1024:.1f} MB</code>
+• Davomiylik: <code>{duration // 60}:{duration % 60:02d}</code>
+
+📝 <b>Endi kino kodini kiriting:</b>
+• Masalan: <code>123</code> yoki <code>#123</code>
+• Takrorlanmaydigan kod bo'lishi kerak""")
+                
+            else:
+                send_message(chat_id, """❌ <b>Video fayl kerak!</b>
+
+📹 Video fayl yuboring yoki bekor qiling.""")
+                
+        elif step == 'waiting_code':
+            code = message.get('text', '').strip()
+            
+            if not code:
+                send_message(chat_id, "❌ Kino kodini kiriting!")
+                return
+            
+            # Clean code
+            clean_code = code.replace('#', '').strip()
+            
+            # Check if code already exists
+            if clean_code in movies_db:
+                send_message(chat_id, f"""❌ <b>Kod allaqachon mavjud!</b>
+
+🔍 <b>Kod:</b> <code>{clean_code}</code>
+💡 Boshqa kod kiriting yoki mavjud kinoni o'chiring.""")
+                return
+            
+            session.update({
+                'code': clean_code,
+                'step': 'waiting_title'
+            })
+            
+            send_message(chat_id, f"""✅ <b>Kod saqlandi:</b> <code>{clean_code}</code>
+
+📝 <b>Kino sarlavhasini kiriting:</b>
+• Masalan: "Avatar 2022"
+• Yoki "No'malum film" deb yozing""")
+            
+        elif step == 'waiting_title':
+            title = message.get('text', '').strip()
+            
+            if not title:
+                send_message(chat_id, "❌ Sarlavhani kiriting!")
+                return
+            
+            session.update({
+                'title': title,
+                'step': 'waiting_info'
+            })
+            
+            send_message(chat_id, f"""✅ <b>Sarlavha saqlandi:</b> {title}
+
+📝 <b>Qo'shimcha ma'lumot kiriting:</b>
+• Janr, yil, rejissyor va boshqalar
+• Yoki "yo'q" deb yozing
+
+💡 <b>Misol:</b> "Aksiya, 2022, Avatar"""")
+            
+        elif step == 'waiting_info':
+            additional_info = message.get('text', '').strip()
+            
+            if additional_info.lower() in ['yo\'q', 'yoq', 'no', '-']:
+                additional_info = ""
+            
+            session.update({
+                'additional_info': additional_info,
+                'step': 'confirmation'
+            })
+            
+            # Show confirmation
+            text = f"""🎬 <b>KINO MA'LUMOTLARINI TASDIQLANG</b>
+
+📝 <b>Kod:</b> <code>{session.get('code')}</code>
+🎭 <b>Sarlavha:</b> {session.get('title')}
+📹 <b>Fayl:</b> {session.get('file_name')}
+📊 <b>Hajm:</b> {session.get('file_size', 0) / 1024 / 1024:.1f} MB
+⏱ <b>Davomiylik:</b> {session.get('duration', 0) // 60}:{session.get('duration', 0) % 60:02d}
+{f'ℹ️ <b>Ma\'lumot:</b> {additional_info}' if additional_info else ''}
+
+✅ <b>Tasdiqlaysizmi?</b>"""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '✅ Tasdiqlash', 'callback_data': 'confirm_upload'},
+                        {'text': '❌ Bekor qilish', 'callback_data': 'cancel_upload'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Movie upload session error: {e}")
+        send_message(chat_id, "❌ Yuklashda xatolik yuz berdi!")
+
+def handle_upload_confirmation(chat_id, user_id, callback_id):
+    """Confirm and save movie upload"""
+    try:
+        if user_id not in upload_sessions:
+            answer_callback_query(callback_id, "❌ Sessiya topilmadi!", True)
+            return
+        
+        session = upload_sessions[user_id]
+        
+        # Create movie data
+        movie_data = {
+            'code': session.get('code'),
+            'title': session.get('title'),
+            'file_id': session.get('file_id'),
+            'file_name': session.get('file_name'),
+            'file_size': session.get('file_size'),
+            'duration': session.get('duration'),
+            'additional_info': session.get('additional_info', ''),
+            'uploaded_by': user_id,
+            'upload_date': datetime.now().isoformat()
+        }
+        
+        # Save to local storage
+        movies_db[session.get('code')] = movie_data
+        
+        # Save to MongoDB if available
+        mongodb_success = False
+        if is_mongodb_available():
+            mongodb_success = save_movie_to_mongodb(movie_data)
+        
+        # Auto-save
+        auto_save_data()
+        
+        # Clear session
+        del upload_sessions[user_id]
+        
+        # Send success message
+        text = f"""✅ <b>KINO MUVAFFAQIYATLI YUKLANDI!</b>
+
+🎬 <b>Saqlangan ma'lumotlar:</b>
+• Kod: <code>{movie_data['code']}</code>
+• Sarlavha: {movie_data['title']}
+• Fayl hajmi: {movie_data['file_size'] / 1024 / 1024:.1f} MB
+• MongoDB: {'✅ Saqlandi' if mongodb_success else '❌ Xatolik'}
+
+🎯 <b>Endi foydalanuvchilar</b> <code>{movie_data['code']}</code> <b>kodini yuborib kinoni olishlari mumkin!</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🎬 Yana Yuklash', 'callback_data': 'start_upload'},
+                    {'text': '📋 Kinolar', 'callback_data': 'admin_movies_list'}
+                ],
+                [
+                    {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"✅ Kino #{movie_data['code']} saqlandi!")
+        
+    except Exception as e:
+        logger.error(f"❌ Upload confirmation error: {e}")
+        answer_callback_query(callback_id, "❌ Saqlashda xatolik!", True)
+
+def handle_unknown_message(chat_id, user_id, text):
+    """Handle unknown messages"""
+    try:
+        # Check if it's a movie code
+        if text and (text.startswith('#') or text.isdigit()):
+            handle_movie_request(chat_id, user_id, text)
+            return
+        
+        # Default response
+        response_text = """❓ <b>Tushunmadim</b>
+
+💡 <b>Quyidagilarni sinab ko'ring:</b>
+• Kino kodini yuboring: <code>123</code>
+• /start - Botni qayta ishga tushirish
+• /help - Yordam olish
+
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '/start', 'callback_data': 'back_to_start'},
+                    {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, response_text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Unknown message error: {e}")
+
+def handle_help_command(chat_id, user_id):
+    """Handle /help command"""
+    try:
+        if user_id == ADMIN_ID:
+            handle_help_admin(chat_id, user_id)
+        else:
+            handle_help_user(chat_id, user_id)
+    except Exception as e:
+        logger.error(f"❌ Help command error: {e}")
+
+def handle_channel_post(channel_post):
+    """Handle channel posts (optional)"""
+    try:
+        logger.info(f"📢 Channel post received: {channel_post.get('chat', {}).get('id')}")
+        # Channel post handling can be implemented here if needed
+    except Exception as e:
+        logger.error(f"❌ Channel post error: {e}")
+
+def handle_admin_callbacks(chat_id, user_id, data, callback_id):
+    """Handle additional admin callbacks"""
+    try:
+        # Handle specific admin callbacks here
+        if data == 'movies_stats':
+            handle_movies_statistics(chat_id, user_id, callback_id)
+        elif data == 'channel_stats':
+            handle_channel_statistics(chat_id, user_id, callback_id)
+        elif data == 'broadcast_text':
+            handle_broadcast_start(chat_id, user_id, 'text', callback_id)
+        else:
+            answer_callback_query(callback_id, "🔄 Tez orada qo'shiladi!")
+    except Exception as e:
+        logger.error(f"❌ Admin callbacks error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik yuz berdi!", True)
+
+def handle_movies_statistics(chat_id, user_id, callback_id):
+    """Show detailed movie statistics"""
+    try:
+        text = f"""📊 <b>BATAFSIL KINO STATISTIKASI</b>
+
+🎬 <b>Asosiy ma'lumotlar:</b>
+• Jami kinolar: <code>{len(movies_db)}</code> ta
+• MongoDB kinolari: <code>{len(get_all_movies_from_mongodb()) if is_mongodb_available() else 0}</code> ta
+• Fayl hajmi: <code>Ma'lumot yo'q</code>
+
+📈 <b>Haftalik statistika:</b>
+• Oxirgi hafta qo'shilgan: <code>0</code> ta
+• Eng ko'p so'ralgan: <code>Ma'lumot yo'q</code>
+
+💾 <b>Saqlash:</b>
+• Local storage: <code>✅ Faol</code>
+• MongoDB: <code>{'✅ Faol' if is_mongodb_available() else '❌ O\'chiq'}</code>
+• Backup: <code>✅ Avtomatik</code>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '📋 Kinolar', 'callback_data': 'admin_movies_list'},
+                    {'text': '🔄 Yangilash', 'callback_data': 'movies_stats'}
+                ],
+                [
+                    {'text': '🔙 Orqaga', 'callback_data': 'upload_movie'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, "📊 Statistikalar")
+        
+    except Exception as e:
+        logger.error(f"❌ Movies statistics error: {e}")
+
+def handle_channel_statistics(chat_id, user_id, callback_id):
+    """Show detailed channel statistics"""
+    try:
+        text = f"""📊 <b>BATAFSIL KANAL STATISTIKASI</b>
+
+📺 <b>Kanal ma'lumotlari:</b>
+• Jami kanallar: <code>{len(channels_db)}</code> ta
+• Faol kanallar: <code>{len([c for c in channels_db.values() if c.get('active', True)])}</code> ta
+• MongoDB kanallari: <code>{len(get_all_channels_from_mongodb()) if is_mongodb_available() else 0}</code> ta
+
+✅ <b>Azolik tizimi:</b>
+• Status: <code>{'✅ Faol' if channels_db else '❌ O\'chiq'}</code>
+• So'nggi tekshiruv: <code>Real-time</code>
+
+💾 <b>Saqlash:</b>
+• Local storage: <code>✅ Faol</code>
+• MongoDB: <code>{'✅ Faol' if is_mongodb_available() else '❌ O\'chiq'}</code>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '📺 Kanallar', 'callback_data': 'list_channels'},
+                    {'text': '🔄 Yangilash', 'callback_data': 'channel_stats'}
+                ],
+                [
+                    {'text': '🔙 Orqaga', 'callback_data': 'channels_menu'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, "📊 Kanal statistikasi")
+        
+    except Exception as e:
+        logger.error(f"❌ Channel statistics error: {e}")
+
+def handle_broadcast_start(chat_id, user_id, broadcast_type, callback_id):
+    """Start broadcast session"""
+    try:
+        broadcast_sessions[user_id] = {
+            'type': broadcast_type,
+            'step': 'waiting_message',
+            'start_time': datetime.now().isoformat()
+        }
+        
+        type_text = {
+            'text': 'matn xabar',
+            'photo': 'rasm + matn',
+            'video': 'video + matn',
+            'document': 'fayl + matn'
+        }.get(broadcast_type, 'xabar')
+        
+        text = f"""📣 <b>BROADCAST - {type_text.upper()}</b>
+
+👥 <b>Foydalanuvchilar:</b> <code>{len(users_db)}</code> ta
+
+📝 <b>{type_text.capitalize()} yuboring:</b>
+
+💡 <b>Eslatma:</b>
+• Xabar barcha foydalanuvchilarга yuboriladi
+• Ehtiyot bo'ling - bekor qilib bo'lmaydi
+• HTML formatlash qo'llab-quvvatlanadi"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '❌ Bekor qilish', 'callback_data': 'broadcast_menu'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"📝 {type_text.capitalize()} yuboring")
+        
+    except Exception as e:
+        logger.error(f"❌ Broadcast start error: {e}")
+
+def handle_broadcast_session(chat_id, message):
+    """Handle broadcast session"""
+    try:
+        user_id = message.get('from', {}).get('id')
+        
+        if user_id not in broadcast_sessions:
+            return
+        
+        session = broadcast_sessions[user_id]
+        broadcast_type = session.get('type')
+        step = session.get('step')
+        
+        if step == 'waiting_message':
+            # Save message for broadcast
+            session.update({
+                'message': message,
+                'step': 'confirmation'
+            })
+            
+            # Show confirmation
+            message_text = message.get('text', message.get('caption', ''))
+            preview = message_text[:100] + ('...' if len(message_text) > 100 else '') if message_text else 'Media fayl'
+            
+            text = f"""📣 <b>BROADCAST TASDIQLASH</b>
+
+👥 <b>Qabul qiluvchilar:</b> <code>{len(users_db)}</code> ta foydalanuvchi
+📝 <b>Xabar turi:</b> {broadcast_type.title()}
+📄 <b>Matn preview:</b> {preview}
+
+⚠️ <b>DIQQAT:</b> Xabar barcha foydalanuvchilarga yuboriladi!
+
+✅ <b>Tasdiqlaysizmi?</b>"""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '✅ Yuborish', 'callback_data': 'confirm_broadcast'},
+                        {'text': '❌ Bekor qilish', 'callback_data': 'cancel_broadcast'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Broadcast session error: {e}")
+
+def handle_broadcast_confirmation(chat_id, user_id, callback_id):
+    """Confirm and execute broadcast"""
+    try:
+        if user_id not in broadcast_sessions:
+            answer_callback_query(callback_id, "❌ Sessiya topilmadi!", True)
+            return
+        
+        session = broadcast_sessions[user_id]
+        message = session.get('message')
+        broadcast_type = session.get('type')
+        
+        # Start broadcasting
+        success_count = 0
+        error_count = 0
+        
+        # Send status message
+        status_text = f"""📣 <b>BROADCAST BOSHLANDI</b>
+
+⏳ Yuborilmoqda... <code>0/{len(users_db)}</code>"""
+        
+        status_msg = send_message(chat_id, status_text)
+        
+        # Broadcast to all users
+        for i, user_id_str in enumerate(users_db.keys(), 1):
+            try:
+                target_user_id = int(user_id_str)
+                
+                if broadcast_type == 'text':
+                    success = send_message(target_user_id, message.get('text', ''))
+                elif broadcast_type == 'photo' and 'photo' in message:
+                    photo_id = message['photo'][-1]['file_id']
+                    success = send_photo(target_user_id, photo_id, message.get('caption', ''))
+                elif broadcast_type == 'video' and 'video' in message:
+                    video_id = message['video']['file_id']
+                    success = send_video(target_user_id, video_id, message.get('caption', ''))
+                else:
+                    success = send_message(target_user_id, message.get('text', ''))
+                
+                if success:
+                    success_count += 1
+                else:
+                    error_count += 1
+                
+                # Update status every 10 users
+                if i % 10 == 0:
+                    updated_text = f"""📣 <b>BROADCAST DAVOM ETMOQDA</b>
+
+✅ Yuborildi: <code>{success_count}</code>
+❌ Xatolik: <code>{error_count}</code>
+⏳ Jarayon: <code>{i}/{len(users_db)}</code>"""
+                    
+                    # Update status message (if possible)
+                    
+                time.sleep(0.1)  # Avoid flooding
+                
+            except Exception as e:
+                error_count += 1
+                logger.error(f"❌ Broadcast to {user_id_str} failed: {e}")
+        
+        # Clear session
+        del broadcast_sessions[user_id]
+        
+        # Send final report
+        final_text = f"""✅ <b>BROADCAST YAKUNLANDI</b>
+
+📊 <b>Natijalar:</b>
+• Jami foydalanuvchilar: <code>{len(users_db)}</code>
+• Muvaffaqiyatli: <code>{success_count}</code>
+• Xatoliklar: <code>{error_count}</code>
+• Muvaffaqiyat foizi: <code>{success_count / len(users_db) * 100:.1f}%</code>
+
+⏰ <b>Sana:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '📣 Yana Yuborish', 'callback_data': 'broadcast_menu'},
+                    {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, final_text, keyboard)
+        answer_callback_query(callback_id, f"✅ {success_count} ta yuborildi!")
+        
+    except Exception as e:
+        logger.error(f"❌ Broadcast confirmation error: {e}")
+        answer_callback_query(callback_id, "❌ Yuborishda xatolik!", True)
+
+# Subscription and channel management functions
+def check_all_subscriptions(user_id):
+    """Check if user is subscribed to all required channels"""
+    try:
+        if not channels_db:
+            return True  # No mandatory channels configured
+        
+        for channel_id, channel_data in channels_db.items():
+            if not channel_data.get('active', True):
+                continue
+                
+            if not check_user_subscription(user_id, channel_id):
+                logger.info(f"User {user_id} not subscribed to {channel_id}")
+                return False
+        
+        logger.info(f"User {user_id} subscribed to all channels")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Check all subscriptions error: {e}")
+        return True  # Allow access on error
+
+def send_subscription_message(chat_id, user_id):
+    """Send subscription required message"""
+    try:
+        text = """🔐 <b>MAJBURIY AZOLIK TIZIMI</b>
+
+📺 <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>
+
+"""
+        
+        keyboard = {'inline_keyboard': []}
+        
+        for channel_id, channel_data in channels_db.items():
+            if not channel_data.get('active', True):
+                continue
+                
+            channel_name = channel_data.get('name', f'Kanal {channel_id}')
+            channel_url = channel_data.get('url', f'https://t.me/{channel_data.get("username", "")}')
+            
+            text += f"📍 {channel_name}\n"
+            
+            keyboard['inline_keyboard'].append([
+                {'text': f'📺 {channel_name}', 'url': channel_url}
+            ])
+        
+        text += f"""
+💡 <b>Barcha kanallarga obuna bo'lgandan so'ng "✅ Tekshirish" tugmasini bosing!</b>
+
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+        
+        keyboard['inline_keyboard'].append([
+            {'text': '✅ Tekshirish', 'callback_data': 'check_subscription'}
+        ])
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Send subscription message error: {e}")
+        send_message(chat_id, "❌ Azolik tekshirishda xatolik!")
+
+def handle_add_channel_session(chat_id, message):
+    """Handle channel addition session"""
+    try:
+        user_id = message.get('from', {}).get('id')
+        text = message.get('text', '')
+        
+        if user_id != ADMIN_ID:
+            return
+        
+        session = upload_sessions.get(user_id, {})
+        
+        if session.get('step') == 'waiting_channel_id':
+            # Save channel ID
+            session['channel_id'] = text.strip()
+            session['step'] = 'waiting_channel_name'
+            
+            send_message(chat_id, """📝 <b>Kanal nomi kiriting:</b>
+
+💡 Masalan: "Tarjima Kino" yoki "Movie Channel"
+
+🎭 <b>Kanal nomini yuboring:</b>""")
+            
+        elif session.get('step') == 'waiting_channel_name':
+            # Save channel name
+            session['name'] = text.strip()
+            session['step'] = 'waiting_channel_username'
+            
+            send_message(chat_id, """📝 <b>Kanal username kiriting:</b>
+
+💡 @ belgisisiz, faqat username
+💡 Masalan: "tarjima_kino_movie"
+
+🎭 <b>Username yuboring:</b>""")
+            
+        elif session.get('step') == 'waiting_channel_username':
+            # Save channel username and create channel
+            username = text.strip().replace('@', '')
+            channel_id = session.get('channel_id')
+            name = session.get('name')
+            
+            # Add channel to database
+            channel_data = {
+                'name': name,
+                'username': username,
+                'url': f'https://t.me/{username}',
+                'add_date': datetime.now().isoformat(),
+                'active': True,
+                'added_by': ADMIN_ID
+            }
+            
+            channels_db[channel_id] = channel_data
+            
+            # Save to MongoDB if available
+            if is_mongodb_available():
+                channel_data['channel_id'] = channel_id
+                save_channel_to_mongodb(channel_data)
+            
+            # Auto-save
+            auto_save_data()
+            
+            # Clear session
+            del upload_sessions[user_id]
+            
+            text = f"""✅ <b>Kanal muvaffaqiyatli qo'shildi!</b>
+
+📺 <b>Kanal ma'lumotlari:</b>
+• ID: <code>{channel_id}</code>
+• Nomi: <code>{name}</code>
+• Username: <code>@{username}</code>
+• URL: <code>https://t.me/{username}</code>
+
+🎯 <b>Endi foydalanuvchilar ushbu kanalga obuna bo'lishi majburiy!</b>"""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '📺 Kanallar', 'callback_data': 'channels_menu'},
+                        {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+            
+    except Exception as e:
+        logger.error(f"❌ Add channel session error: {e}")
+        send_message(chat_id, "❌ Kanal qo'shishda xatolik!")
 
 # Initialize and run
 initialize_bot()
