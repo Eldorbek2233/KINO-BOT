@@ -2875,7 +2875,6 @@ def handle_add_channel_session(chat_id, message):
             send_message(chat_id, text, keyboard)
             
         elif step == 'waiting_channel_name':
-        elif step == 'waiting_channel_name':
             # Get channel name
             if text.lower() in ['ok', 'ha', 'yes']:
                 channel_name = session.get('suggested_name')
