@@ -851,42 +851,50 @@ def handle_message(message):
         
         logger.info(f"💬 Message from {user_id}: {text[:50]}...")
         
-        # Ultra fast subscription check for non-admin users
+        # Ultra fast subscription check for non-admin users - OPTIMIZED VERSION
         if channels_db and user_id != ADMIN_ID:
             try:
-                # Quick subscription check without detailed logging
-                needs_subscription = False
+                # Skip subscription check for specific commands after successful verification
+                skip_check_commands = ['/start', '/help']
+                should_skip = any(text.startswith(cmd) for cmd in skip_check_commands)
                 
-                for channel_id, channel_data in channels_db.items():
-                    if not channel_data.get('active', True):
-                        continue
+                # Also skip if this is a movie request (user already verified)
+                is_movie_request = text and (text.startswith('#') or text.isdigit())
+                
+                if not should_skip and not is_movie_request:
+                    # Quick subscription check without detailed logging
+                    needs_subscription = False
                     
-                    # Ultra fast check
-                    try:
-                        url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
-                        data_check = {'chat_id': channel_id, 'user_id': user_id}
-                        response = requests.post(url, data=data_check, timeout=2)
+                    for channel_id, channel_data in channels_db.items():
+                        if not channel_data.get('active', True):
+                            continue
                         
-                        if response.status_code == 200:
-                            result = response.json()
-                            if result.get('ok'):
-                                status = result.get('result', {}).get('status', '')
-                                if status not in ['member', 'administrator', 'creator', 'restricted']:
+                        # Ultra fast check
+                        try:
+                            url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
+                            data_check = {'chat_id': channel_id, 'user_id': user_id}
+                            response = requests.post(url, data=data_check, timeout=2)
+                            
+                            if response.status_code == 200:
+                                result = response.json()
+                                if result.get('ok'):
+                                    status = result.get('result', {}).get('status', '')
+                                    if status not in ['member', 'administrator', 'creator', 'restricted']:
+                                        needs_subscription = True
+                                        break
+                                else:
                                     needs_subscription = True
                                     break
                             else:
                                 needs_subscription = True
                                 break
-                        else:
+                        except:
                             needs_subscription = True
                             break
-                    except:
-                        needs_subscription = True
-                        break
-                
-                if needs_subscription:
-                    send_subscription_message(chat_id, user_id)
-                    return
+                    
+                    if needs_subscription:
+                        send_subscription_message(chat_id, user_id)
+                        return
                     
             except Exception as check_error:
                 logger.error(f"❌ Quick subscription check error for user {user_id}: {check_error}")
@@ -1282,7 +1290,7 @@ def handle_callback_query(callback_query):
             answer_callback_query(callback_id, "❌ Bekor qilindi")
             
         elif data == 'check_subscription':
-            # Ultra-fast subscription check with proper status verification
+            # OPTIMIZED subscription check with proper user experience
             logger.info(f"🔍 Starting subscription check for user {user_id}")
             
             try:
@@ -1291,20 +1299,78 @@ def handle_callback_query(callback_query):
                 
                 # Use improved subscription check function
                 if check_all_subscriptions(user_id):
-                    # Grant access immediately
-                    user_info = users_db.get(str(user_id), {})
-                    handle_start_command(chat_id, user_id, user_info)
+                    # Grant access with success message
+                    success_text = f"""✅ <b>MUVAFFAQIYAT!</b>
+
+🎉 Barcha kanallarga obuna bo'lgansiz!
+🎬 Endi botdan to'liq foydalanishingiz mumkin!
+
+💡 <b>Kino olish uchun:</b>
+• Kino kodini yuboring: <code>123</code>
+• # belgisi bilan: <code>#123</code>
+
+🎭 <b>Ultimate Professional Kino Bot ga xush kelibsiz!</b>"""
+
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
+                                {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
+                            ],
+                            [
+                                {'text': '🏠 Bosh Sahifa', 'callback_data': 'back_to_start'}
+                            ]
+                        ]
+                    }
+                    
+                    send_message(chat_id, success_text, keyboard)
                     logger.info(f"✅ User {user_id} - all subscriptions verified, access granted")
                 else:
                     # Show subscription message with detailed info
-                    send_subscription_message(chat_id, user_id)
+                    failed_text = """❌ <b>OBUNA TEKSHIRUVI MUVAFFAQIYATSIZ!</b>
+
+⚠️ Siz hali barcha kanallarga obuna bo'lmadingiz!
+
+📋 <b>Quyidagi amallarni bajaring:</b>
+1️⃣ Yuqoridagi barcha kanallarga obuna bo'ling
+2️⃣ "OBUNA BO'LDIM" tugmasini bosing
+3️⃣ Tekshirish natijasini kuting
+
+💡 <b>Eslatma:</b> Barcha kanallarga obuna bo'lish MAJBURIY!"""
+                    
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '✅ OBUNA BO\'LDIM - QAYTA TEKSHIRISH', 'callback_data': 'check_subscription'}
+                            ]
+                        ]
+                    }
+                    
+                    send_message(chat_id, failed_text, keyboard)
                     logger.info(f"❌ User {user_id} - subscription verification failed")
                     
             except Exception as check_error:
                 logger.error(f"❌ Subscription check error for user {user_id}: {check_error}")
-                # Show subscription message on error to avoid blocking
-                send_subscription_message(chat_id, user_id)
-                logger.info(f"⚠️ User {user_id} - error occurred, showing subscription message")
+                # Show error message
+                error_text = """⚠️ <b>TEKSHIRISH XATOLIGI!</b>
+
+🔧 Texnik xatolik yuz berdi. Iltimos qaytadan urinib ko'ring.
+
+💡 Agar muammo davom etsa, admin bilan bog'laning."""
+                
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🔄 Qayta Urinish', 'callback_data': 'check_subscription'}
+                        ],
+                        [
+                            {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, error_text, keyboard)
+                logger.info(f"⚠️ User {user_id} - error occurred during subscription check")
                 
         elif data == 'refresh_subscription':
             # Ultra fast refresh - just show subscription message again
@@ -3387,9 +3453,12 @@ def send_subscription_message(chat_id, user_id):
 
 🎯 <b>Professional kino bot - sizning xizmatlaringizda!</b>"""
         
-        # Add check button with clear text
+        # Add check button with clear instructions
         keyboard['inline_keyboard'].append([
-            {'text': '✅ OBUNA BO\'LDIM - TEKSHIRISH', 'callback_data': 'check_subscription'}
+            {'text': '✅ BARCHA KANALLARGA OBUNA BO\'LDIM', 'callback_data': 'check_subscription'}
+        ])
+        keyboard['inline_keyboard'].append([
+            {'text': '📞 Yordam Kerak', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
         ])
         
         send_message(chat_id, text, keyboard)
