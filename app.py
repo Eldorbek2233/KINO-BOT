@@ -397,6 +397,7 @@ def load_data():
             try:
                 # Load users from MongoDB
                 mongodb_users = mongo_db.users.find({'status': 'active'})
+                users_loaded = 0
                 for user in mongodb_users:
                     user_id = str(user['user_id'])
                     users_db[user_id] = {
@@ -405,11 +406,13 @@ def load_data():
                         'first_name': user.get('first_name', ''),
                         'last_name': user.get('last_name', ''),
                         'join_date': user.get('join_date', datetime.now().isoformat()),
-                        'last_active': user.get('last_active', datetime.now().isoformat()),
+                        'last_seen': user.get('last_active', datetime.now().isoformat()),
                         'message_count': user.get('message_count', 0),
+                        'is_active': True,
                         'active': True
                     }
-                logger.info(f"✅ Loaded {len(users_db)} users from MongoDB")
+                    users_loaded += 1
+                logger.info(f"✅ Loaded {users_loaded} users from MongoDB to local storage")
                 
                 # Load movies from MongoDB
                 mongodb_movies = mongo_db.movies.find({'status': 'active'})
@@ -1388,6 +1391,8 @@ def handle_statistics(chat_id, user_id):
         movie_codes = list(movies_db.keys())[:10]
         codes_display = ", ".join(movie_codes) if movie_codes else "Hech narsa"
         
+        obuna_status = 'Faol' if channels_db else "O'chiq"
+        
         text = f"""📊 <b>PROFESSIONAL STATISTICS DASHBOARD</b>
 
 👥 <b>Foydalanuvchilar hisoboti:</b>
@@ -1402,7 +1407,7 @@ def handle_statistics(chat_id, user_id):
 
 📺 <b>Kanal hisoboti:</b>
 • Majburiy kanallar: <code>{len(channels_db)}</code> ta
-• Obuna tizimi: <code>{'Faol' if channels_db else 'O\'chiq'}</code>
+• Obuna tizimi: <code>{obuna_status}</code>
 
 ⚙️ <b>Tizim hisoboti:</b>
 • Platform: <code>Render.com</code>
@@ -1756,12 +1761,14 @@ def handle_upload_menu(chat_id, user_id):
         recent_movies = list(movies_db.keys())[:5]
         recent_display = ", ".join(recent_movies) if recent_movies else "Hech narsa"
         
+        mongodb_status = '✅ Ulangan' if is_mongodb_available() else "❌ O'chiq"
+        
         text = f"""🎬 <b>PROFESSIONAL KINO BOSHQARUV TIZIMI</b>
 
 📊 <b>Kino statistikasi:</b>
 • Jami kinolar: <code>{total_movies}</code> ta
 • Oxirgi kinolar: <code>{recent_display}</code>
-• MongoDB: <code>{'✅ Ulangan' if is_mongodb_available() else '❌ O\'chiq'}</code>
+• MongoDB: <code>{mongodb_status}</code>
 
 ⚙️ <b>Boshqaruv funksiyalari:</b>
 • Yangi kino yuklash
@@ -2009,6 +2016,8 @@ def handle_system_menu(chat_id, user_id):
         
         uptime_seconds = int(time.time())
         
+        mongodb_status = '✅ Ulangan' if is_mongodb_available() else "❌ O'chiq"
+        
         text = f"""🔧 <b>PROFESSIONAL TIZIM BOSHQARUVI</b>
 
 💻 <b>Tizim ma'lumotlari:</b>
@@ -2020,7 +2029,7 @@ def handle_system_menu(chat_id, user_id):
 
 🔄 <b>Bot holati:</b>
 • Uptime: <code>{uptime_seconds} sekund</code>
-• MongoDB: <code>{'✅ Ulangan' if is_mongodb_available() else '❌ O\'chiq'}</code>
+• MongoDB: <code>{mongodb_status}</code>
 • Webhook: <code>✅ Faol</code>
 • Auto-save: <code>✅ Faol</code>
 • Keep-alive: <code>✅ Faol</code>
@@ -2136,6 +2145,16 @@ def handle_help_admin(chat_id, user_id):
         logger.error(f"❌ Admin help error: {e}")
         send_message(chat_id, "❌ Admin yordam tizimida xatolik!")
 
+# Additional admin functions for complete functionality
+def handle_broadcast_menu(chat_id, user_id):
+    """Professional broadcast system"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Admin huquqi kerak!")
+            return
+        
+        text = """🎯 <b>PROFESSIONAL REKLAMA TIZIMI</b>
+
 📢 <b>Reklama turlari:</b>
 • 📝 Matn xabari
 • 🖼 Rasm bilan
@@ -2187,16 +2206,18 @@ def handle_channels_menu(chat_id, user_id):
             for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
                 channel_name = channel_data.get('name', f'Kanal {i}')
                 channel_url = channel_data.get('url', 'URL mavjud emas')
-                status = '✅ Faol' if channel_data.get('active', True) else '❌ O\'chiq'
+                status = '✅ Faol' if channel_data.get('active', True) else "❌ O'chiq"
                 channel_list += f"{i}. <b>{channel_name}</b> - {status}\n"
         else:
             channel_list = "❌ Hech qanday kanal qo'shilmagan"
+        
+        majburiy_status = 'Faol' if channel_count > 0 else "O'chiq"
         
         text = f"""📺 <b>PROFESSIONAL KANAL BOSHQARUVI</b>
 
 📊 <b>Kanal hisoboti:</b>
 • Jami kanallar: <code>{channel_count}</code> ta
-• Majburiy obuna: <code>{'Faol' if channel_count > 0 else 'O\'chiq'}</code>
+• Majburiy obuna: <code>{majburiy_status}</code>
 
 📋 <b>Mavjud kanallar:</b>
 {channel_list}
@@ -3177,7 +3198,9 @@ def handle_channel_removal(chat_id, user_id, channel_id, callback_id):
             return
         
         channel_data = channels_db[channel_id]
-        channel_name = channel_data.get('name', 'Noma\'lum kanal')
+        channel_name = channel_data.get('name', "Noma'lum kanal")
+        username = channel_data.get('username', "Noma'lum")
+        add_date = channel_data.get('add_date', "Noma'lum")[:10]
         
         # Show confirmation dialog
         text = f"""🗑 <b>KANAL O'CHIRISH TASDIQI</b>
@@ -3185,8 +3208,8 @@ def handle_channel_removal(chat_id, user_id, channel_id, callback_id):
 ⚠️ <b>Diqqat!</b> Quyidagi kanalni o'chirmoqchimisiz?
 
 📺 <b>Kanal:</b> {channel_name}
-🔗 <b>Username:</b> {channel_data.get('username', 'Noma\'lum')}
-📅 <b>Qo'shilgan:</b> {channel_data.get('add_date', 'Noma\'lum')[:10]}
+🔗 <b>Username:</b> {username}
+📅 <b>Qo'shilgan:</b> {add_date}
 
 ❗️ <b>Bu amalni bekor qilib bo'lmaydi!</b>
 
@@ -3236,11 +3259,13 @@ def handle_channel_removal_confirmation(chat_id, user_id, channel_id, callback_i
         # Auto-save changes
         auto_save_data()
         
+        majburiy_obuna = 'Faol' if len(channels_db) > 0 else "O'chiq"
+        
         text = f"""✅ <b>KANAL MUVAFFAQIYATLI O'CHIRILDI!</b>
 
 🗑 <b>O'chirilgan kanal:</b> {channel_name}
 📊 <b>Qolgan kanallar:</b> {len(channels_db)} ta
-🔄 <b>Majburiy obuna:</b> {'Faol' if len(channels_db) > 0 else 'O\'chiq'}
+🔄 <b>Majburiy obuna:</b> {majburiy_obuna}
 
 💾 <b>Ma'lumotlar:</b> MongoDB + JSON backup yangilandi"""
 
@@ -3269,15 +3294,18 @@ def handle_subscription_settings(chat_id, user_id):
         subscription_enabled = len(channels_db) > 0
         active_channels = len([c for c in channels_db.values() if c.get('active', True)])
         
+        majburiy_status = '✅ Faol' if subscription_enabled else "❌ O'chiq"
+        tekshirish_status = '✅ Faol' if subscription_enabled else "❌ O'chiq"
+        
         text = f"""⚙️ <b>OBUNA SOZLAMALARI</b>
 
 📊 <b>Hozirgi holat:</b>
-• Majburiy obuna: <code>{'✅ Faol' if subscription_enabled else '❌ O\'chiq'}</code>
+• Majburiy obuna: <code>{majburiy_status}</code>
 • Jami kanallar: <code>{len(channels_db)}</code> ta
 • Faol kanallar: <code>{active_channels}</code> ta
 
 🔧 <b>Sozlamalar:</b>
-• Obuna tekshirish: <code>{'✅ Faol' if subscription_enabled else '❌ O\'chiq'}</code>
+• Obuna tekshirish: <code>{tekshirish_status}</code>
 • Auto-check: <code>✅ Faol</code>
 • Bypass admin: <code>✅ Faol</code>
 
@@ -3346,8 +3374,12 @@ Statistika ko'rish uchun avval kanal qo'shing."""
         for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
             channel_name = channel_data.get('name', f'Kanal {i}')
             status = '✅' if channel_data.get('active', True) else '❌'
-            add_date = channel_data.get('add_date', 'Noma\'lum')
-            text += f"{i}. {status} <b>{channel_name}</b>\n   📅 Qo'shilgan: {add_date[:10] if add_date != 'Noma\'lum' else add_date}\n\n"
+            add_date = channel_data.get('add_date', "Noma'lum")
+            if add_date != "Noma'lum":
+                date_display = add_date[:10]
+            else:
+                date_display = add_date
+            text += f"{i}. {status} <b>{channel_name}</b>\n   📅 Qo'shilgan: {date_display}\n\n"
         
         keyboard = {
             'inline_keyboard': [
@@ -3489,6 +3521,10 @@ def handle_upload_statistics(chat_id, user_id):
         total_hours = total_duration / 3600
         avg_duration_min = (total_duration / total_movies / 60) if total_movies > 0 else 0
         
+        # Calculate trends
+        tendensiya = '📈 O\'sish' if recent_uploads > 3 else '📊 Barqaror'
+        tendensiya_fix = "📈 O'sish" if recent_uploads > 3 else "📊 Barqaror"
+        
         text = f"""📊 <b>YUKLASH STATISTIKASI</b>
 
 🎬 <b>Kino statistikasi:</b>
@@ -3508,7 +3544,7 @@ def handle_upload_statistics(chat_id, user_id):
 
 📈 <b>Yuklash tendensiyasi:</b>
 • Haftalik o'sish: {recent_uploads} ta
-• Tendensiya: {'📈 O\'sish' if recent_uploads > 3 else '📊 Barqaror'}
+• Tendensiya: {tendensiya_fix}
 • Storage usage: Professional level
 
 ⚙️ <b>Yuklash sifati:</b>
@@ -3842,14 +3878,16 @@ def handle_export_users(chat_id, user_id):
         
         # Add detailed info for first 20 users
         for i, (uid, udata) in enumerate(list(users_db.items())[:20], 1):
-            name = udata.get('first_name', 'Noma\'lum')
-            username = udata.get('username', 'Yo\'q')
-            join_date = udata.get('join_date', 'Noma\'lum')[:10]
+            name = udata.get('first_name', "Noma'lum")
+            username = udata.get('username', "Yo'q")
+            join_date = udata.get('join_date', "Noma'lum")[:10]
             msg_count = udata.get('message_count', 0)
+            
+            username_display = f"@{username}" if username != "Yo'q" else "Yo'q"
             
             export_text += f"{i}. {name}\n"
             export_text += f"   ID: {uid}\n"
-            export_text += f"   Username: @{username if username != 'Yo\'q' else 'Yo\'q'}\n"
+            export_text += f"   Username: {username_display}\n"
             export_text += f"   Qo'shilgan: {join_date}\n"
             export_text += f"   Xabarlar: {msg_count}\n\n"
         
@@ -3925,6 +3963,17 @@ def handle_user_trends(chat_id, user_id):
         daily_percent = (daily_active / total_users * 100) if total_users > 0 else 0
         weekly_percent = (weekly_active / total_users * 100) if total_users > 0 else 0
         
+        # Calculate quality indicator
+        if daily_percent > 10:
+            sifat_korsatkichi = '🟢 Yaxshi'
+        elif daily_percent > 5:
+            sifat_korsatkichi = "🟡 O'rtacha"
+        else:
+            sifat_korsatkichi = '🔴 Past'
+            
+        # Calculate forecast
+        prognoz = "Barqaror o'sish" if new_users_week > 0 else 'Barqarorlik'
+        
         text = f"""📈 <b>FOYDALANUVCHI TENDENSIYALARI</b>
 
 📊 <b>Faollik tendensiyasi:</b>
@@ -3945,9 +3994,9 @@ def handle_user_trends(chat_id, user_id):
 🎯 <b>Engagement:</b>
 • Faol foydalanuvchilar: {daily_percent:.1f}%
 • Qaytgan foydalanuvchilar: {weekly_percent - daily_percent:.1f}%
-• Sifat ko'rsatkichi: {'🟢 Yaxshi' if daily_percent > 10 else '🟡 O\'rtacha' if daily_percent > 5 else '🔴 Past'}
+• Sifat ko'rsatkichi: {sifat_korsatkichi}
 
-📈 <b>Prognoz:</b> {'Barqaror o\'sish' if new_users_week > 0 else 'Barqarorlik'}"""
+📈 <b>Prognoz:</b> {prognoz}"""
 
         keyboard = {
             'inline_keyboard': [
@@ -4772,6 +4821,8 @@ def handle_movies_statistics(chat_id, user_id):
         recent_codes = list(movies_db.keys())[:5]
         recent_display = ", ".join(recent_codes) if recent_codes else "Hech narsa"
         
+        mongodb_status = '✅ Ulangan' if is_mongodb_available() else "❌ O'chiq"
+        
         text = f"""📊 <b>KINO STATISTIKA DASHBOARD</b>
 
 🎬 <b>Asosiy ma'lumotlar:</b>
@@ -4784,7 +4835,7 @@ def handle_movies_statistics(chat_id, user_id):
 <code>{recent_display}</code>
 
 💾 <b>Database holati:</b>
-• MongoDB: <code>{'✅ Ulanган' if is_mongodb_available() else '❌ O\'chiq'}</code>
+• MongoDB: <code>{mongodb_status}</code>
 • JSON backup: <code>✅ Faol</code>
 • Auto-save: <code>✅ 5 daqiqada</code>
 
@@ -4954,6 +5005,8 @@ def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
         # Save changes
         auto_save_data()
         
+        mongodb_status = '✅ O\'chirildi' if mongodb_deleted else "❌ Xatolik yoki mavjud emas"
+        
         text = f"""✅ <b>KINO MUVAFFAQIYATLI O'CHIRILDI!</b>
 
 🎬 <b>O'chirilgan kino:</b>
@@ -4962,7 +5015,7 @@ def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
 
 💾 <b>O'chirish holati:</b>
 • JSON file: <code>✅ O'chirildi</code>
-• MongoDB: <code>{'✅ O\'chirildi' if mongodb_deleted else '❌ Xatolik yoki mavjud emas'}</code>
+• MongoDB: <code>{mongodb_status}</code>
 • Backup: <code>✅ Saqlanib qoldi</code>
 
 📊 <b>Qolgan kinolar:</b> <code>{len(movies_db)}</code> ta
@@ -5398,12 +5451,12 @@ def handle_movie_upload_session(chat_id, message, session):
 • Janr, yil, rejissyor va boshqalar
 • Yoki "yo'q" deb yozing
 
-💡 <b>Misol:</b> "Aksiya, 2022, Avatar"""")
+💡 <b>Misol:</b> "Aksiya, 2022, Avatar\"""")
             
         elif step == 'waiting_info':
             additional_info = message.get('text', '').strip()
             
-            if additional_info.lower() in ['yo\'q', 'yoq', 'no', '-']:
+            if additional_info.lower() in ["yo'q", 'yoq', 'no', '-']:
                 additional_info = ""
             
             session.update({
@@ -5412,6 +5465,8 @@ def handle_movie_upload_session(chat_id, message, session):
             })
             
             # Show confirmation
+            info_text = f"ℹ️ <b>Ma'lumot:</b> {additional_info}" if additional_info else ''
+            
             text = f"""🎬 <b>KINO MA'LUMOTLARINI TASDIQLANG</b>
 
 📝 <b>Kod:</b> <code>{session.get('code')}</code>
@@ -5419,7 +5474,7 @@ def handle_movie_upload_session(chat_id, message, session):
 📹 <b>Fayl:</b> {session.get('file_name')}
 📊 <b>Hajm:</b> {session.get('file_size', 0) / 1024 / 1024:.1f} MB
 ⏱ <b>Davomiylik:</b> {session.get('duration', 0) // 60}:{session.get('duration', 0) % 60:02d}
-{f'ℹ️ <b>Ma\'lumot:</b> {additional_info}' if additional_info else ''}
+{info_text}
 
 ✅ <b>Tasdiqlaysizmi?</b>"""
             
@@ -5573,6 +5628,8 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
 def handle_movies_statistics(chat_id, user_id, callback_id):
     """Show detailed movie statistics"""
     try:
+        mongodb_status = '✅ Faol' if is_mongodb_available() else "❌ O'chiq"
+        
         text = f"""📊 <b>BATAFSIL KINO STATISTIKASI</b>
 
 🎬 <b>Asosiy ma'lumotlar:</b>
@@ -5586,7 +5643,7 @@ def handle_movies_statistics(chat_id, user_id, callback_id):
 
 💾 <b>Saqlash:</b>
 • Local storage: <code>✅ Faol</code>
-• MongoDB: <code>{'✅ Faol' if is_mongodb_available() else '❌ O\'chiq'}</code>
+• MongoDB: <code>{mongodb_status}</code>
 • Backup: <code>✅ Avtomatik</code>"""
         
         keyboard = {
@@ -5610,6 +5667,9 @@ def handle_movies_statistics(chat_id, user_id, callback_id):
 def handle_channel_statistics(chat_id, user_id, callback_id):
     """Show detailed channel statistics"""
     try:
+        status_text = '✅ Faol' if channels_db else "❌ O'chiq"
+        mongodb_status = '✅ Faol' if is_mongodb_available() else "❌ O'chiq"
+        
         text = f"""📊 <b>BATAFSIL KANAL STATISTIKASI</b>
 
 📺 <b>Kanal ma'lumotlari:</b>
@@ -5618,12 +5678,12 @@ def handle_channel_statistics(chat_id, user_id, callback_id):
 • MongoDB kanallari: <code>{len(get_all_channels_from_mongodb()) if is_mongodb_available() else 0}</code> ta
 
 ✅ <b>Azolik tizimi:</b>
-• Status: <code>{'✅ Faol' if channels_db else '❌ O\'chiq'}</code>
+• Status: <code>{status_text}</code>
 • So'nggi tekshiruv: <code>Real-time</code>
 
 💾 <b>Saqlash:</b>
 • Local storage: <code>✅ Faol</code>
-• MongoDB: <code>{'✅ Faol' if is_mongodb_available() else '❌ O\'chiq'}</code>"""
+• MongoDB: <code>{mongodb_status}</code>"""
         
         keyboard = {
             'inline_keyboard': [
