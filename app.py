@@ -616,6 +616,43 @@ def check_user_subscription(user_id, channel_id):
         logger.error(f"❌ Subscription check error: {e}")
         return False
 
+def check_user_subscription_fast(user_id, channel_id):
+    """Fast subscription check with reduced timeout and better error handling"""
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
+        data = {
+            'chat_id': channel_id,
+            'user_id': user_id
+        }
+        
+        # Reduced timeout for faster response
+        response = requests.post(url, data=data, timeout=5)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('ok'):
+                member = result.get('result', {})
+                status = member.get('status', '')
+                is_subscribed = status in ['member', 'administrator', 'creator']
+                
+                # Log detailed status for debugging
+                logger.info(f"🔍 Channel {channel_id}, User {user_id}: Status='{status}', Subscribed={is_subscribed}")
+                return is_subscribed
+            else:
+                error_desc = result.get('description', 'Unknown error')
+                logger.warning(f"⚠️ Telegram API error for channel {channel_id}: {error_desc}")
+                return False
+        else:
+            logger.warning(f"⚠️ HTTP {response.status_code} for channel {channel_id}")
+            return False
+        
+    except requests.exceptions.Timeout:
+        logger.warning(f"⏰ Timeout checking subscription for channel {channel_id}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Fast subscription check error for {channel_id}: {e}")
+        return False
+
 # User Management
 def save_user(user_info, user_id):
     """Professional user saving with MongoDB integration"""
@@ -807,11 +844,15 @@ def handle_message(message):
         
         logger.info(f"💬 Message from {user_id}: {text[:50]}...")
         
-        # Check for subscription if channels configured
+        # Fast subscription check for non-admin users
         if channels_db and user_id != ADMIN_ID:
+            logger.info(f"🔍 Quick subscription check for user {user_id}")
             if not check_all_subscriptions(user_id):
+                logger.info(f"❌ User {user_id} failed subscription check - showing subscription message")
                 send_subscription_message(chat_id, user_id)
                 return
+            else:
+                logger.info(f"✅ User {user_id} passed subscription check - proceeding")
         
         # Handle upload sessions
         if user_id == ADMIN_ID and user_id in upload_sessions:
@@ -1190,16 +1231,26 @@ def handle_callback_query(callback_query):
             answer_callback_query(callback_id, "❌ Bekor qilindi")
             
         elif data == 'check_subscription':
+            # Enhanced subscription check with detailed feedback
+            logger.info(f"🔍 Starting subscription check for user {user_id}")
+            
             if check_all_subscriptions(user_id):
+                # User is subscribed to all channels - grant access
                 user_info = users_db.get(str(user_id), {})
                 handle_start_command(chat_id, user_id, user_info)
-                answer_callback_query(callback_id, "✅ Tasdiqlandi!")
+                answer_callback_query(callback_id, "✅ Barcha kanallarga obuna bo'lgansiz! Bot faol.")
+                logger.info(f"✅ User {user_id} granted access - all subscriptions verified")
             else:
-                answer_callback_query(callback_id, "❌ Barcha kanallarga obuna bo'ling!", True)
+                # User is missing some subscriptions - show updated status
+                send_subscription_message(chat_id, user_id)
+                answer_callback_query(callback_id, "❌ Ba'zi kanallarga obuna bo'lmadingiz! Yangilandi.", True)
+                logger.info(f"❌ User {user_id} access denied - missing subscriptions")
         
         elif data == 'refresh_subscription':
+            # Force refresh subscription status
+            logger.info(f"🔄 Refreshing subscription status for user {user_id}")
             send_subscription_message(chat_id, user_id)
-            answer_callback_query(callback_id, "🔄 Obuna xabari yangilandi")
+            answer_callback_query(callback_id, "🔄 Obuna holati yangilandi")
                 
         elif data == 'refresh':
             # Refresh current menu
@@ -3062,83 +3113,149 @@ def handle_channel_post(channel_post):
         logger.error(f"❌ Channel post error: {e}")
 
 def check_all_subscriptions(user_id):
-    """Check if user is subscribed to all required channels"""
+    """Fast and optimized subscription check for all required channels"""
     try:
         if not channels_db:
             return True  # No required channels
         
+        unsubscribed_channels = []
+        subscribed_channels = []
+        
+        # Check each channel with optimized timeout
         for channel_id, channel_data in channels_db.items():
             if not channel_data.get('active', True):
                 continue  # Skip inactive channels
             
-            # Check subscription using Telegram API
-            is_subscribed = check_user_subscription(user_id, channel_id)
-            if not is_subscribed:
-                logger.info(f"❌ User {user_id} not subscribed to channel {channel_id}")
-                return False
+            channel_name = channel_data.get('name', 'Kanal')
+            
+            # Fast subscription check with reduced timeout
+            is_subscribed = check_user_subscription_fast(user_id, channel_id)
+            
+            if is_subscribed:
+                subscribed_channels.append({'id': channel_id, 'name': channel_name})
+                logger.info(f"✅ User {user_id} subscribed to {channel_name}")
+            else:
+                unsubscribed_channels.append({'id': channel_id, 'name': channel_name})
+                logger.info(f"❌ User {user_id} NOT subscribed to {channel_name}")
         
-        logger.info(f"✅ User {user_id} subscribed to all channels")
-        return True
+        # Return True only if subscribed to ALL channels
+        if len(unsubscribed_channels) == 0:
+            logger.info(f"🎉 User {user_id} subscribed to ALL {len(subscribed_channels)} channels!")
+            return True
+        else:
+            logger.info(f"⚠️ User {user_id} missing {len(unsubscribed_channels)} subscriptions")
+            return False
         
     except Exception as e:
         logger.error(f"❌ Subscription check error: {e}")
         return False  # Default to requiring subscription on error
 
 def send_subscription_message(chat_id, user_id):
-    """Send subscription requirement message"""
+    """Send detailed subscription requirement message with current status"""
     try:
         if not channels_db:
             return
         
-        text = """📺 <b>MAJBURIY OBUNA!</b>
+        # Check current subscription status for each channel
+        subscription_status = {}
+        subscribed_count = 0
+        total_channels = 0
+        
+        for channel_id, channel_data in channels_db.items():
+            if channel_data.get('active', True):
+                total_channels += 1
+                is_subscribed = check_user_subscription_fast(user_id, channel_id)
+                subscription_status[channel_id] = {
+                    'subscribed': is_subscribed,
+                    'name': channel_data.get('name', f'Kanal {total_channels}'),
+                    'username': channel_data.get('username', '')
+                }
+                if is_subscribed:
+                    subscribed_count += 1
+        
+        text = f"""📺 <b>MAJBURIY OBUNA TEKSHIRUVI</b>
 
-🎭 <b>Ultimate Professional Kino Bot</b>dan foydalanish uchun quyidagi kanallarga obuna bo'ling:
+🎭 <b>Ultimate Professional Kino Bot</b>
+
+📊 <b>Obuna holati:</b>
+• Jami kanallar: <code>{total_channels}</code> ta
+• Obuna bo'lgan: <code>{subscribed_count}</code> ta
+• Qolgan: <code>{total_channels - subscribed_count}</code> ta
+
+📋 <b>Kanallar ro'yxati:</b>
 
 """
         
         keyboard = {'inline_keyboard': []}
         
-        # Add subscription buttons for each channel
-        for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
-            if channel_data.get('active', True):
-                channel_name = channel_data.get('name', f'Kanal {i}')
-                username = channel_data.get('username', '')
-                
-                if username:
-                    channel_url = f'https://t.me/{username}'
-                else:
-                    channel_url = f'https://t.me/joinchat/{channel_id.replace("-100", "")}'
-                
-                text += f"{i}. 📺 <b>{channel_name}</b> - @{username}\n"
-                
-                keyboard['inline_keyboard'].append([
-                    {'text': f'📺 {channel_name}', 'url': channel_url}
-                ])
+        # Add subscription buttons for each channel with status
+        for i, (channel_id, status_info) in enumerate(subscription_status.items(), 1):
+            channel_name = status_info['name']
+            username = status_info['username']
+            is_subscribed = status_info['subscribed']
+            
+            # Status emoji
+            status_emoji = "✅" if is_subscribed else "❌"
+            status_text = "Obuna bo'lgan" if is_subscribed else "Obuna bo'ling!"
+            
+            if username:
+                channel_url = f'https://t.me/{username}'
+            else:
+                channel_url = f'https://t.me/joinchat/{channel_id.replace("-100", "")}'
+            
+            text += f"{i}. {status_emoji} <b>{channel_name}</b> - @{username}\n"
+            text += f"   Status: <code>{status_text}</code>\n\n"
+            
+            # Button text shows current status
+            button_text = f"{status_emoji} {channel_name}"
+            keyboard['inline_keyboard'].append([
+                {'text': button_text, 'url': channel_url}
+            ])
         
-        text += f"""
-✅ <b>Barcha kanallarga obuna bo'lgandan keyin "Tekshirish" tugmasini bosing!</b>
+        if subscribed_count == total_channels:
+            text += f"""🎉 <b>TABRIKLAYMIZ!</b>
+✅ Siz barcha kanallarga obuna bo'lgansiz!
+🎬 Endi botdan to'liq foydalanishingiz mumkin!"""
+            
+            # Add success button
+            keyboard['inline_keyboard'].append([
+                {'text': '🎬 Botdan foydalanish', 'callback_data': 'check_subscription'}
+            ])
+        else:
+            text += f"""⚠️ <b>DIQQAT!</b>
+❌ Siz hali <code>{total_channels - subscribed_count}</code> ta kanalga obuna bo'lmadingiz!
+
+🔄 <b>Obuna bo'lgandan keyin "Tekshirish" tugmasini bosing!</b>"""
+            
+            # Add check subscription button
+            keyboard['inline_keyboard'].append([
+                {'text': '🔍 Obunani Tekshirish', 'callback_data': 'check_subscription'},
+                {'text': '🔄 Yangilash', 'callback_data': 'refresh_subscription'}
+            ])
         
-🎯 <b>Professional kino bot - sizning xizmatlaringizda!</b>"""
-        
-        # Add check subscription button
-        keyboard['inline_keyboard'].append([
-            {'text': '✅ Obunani Tekshirish', 'callback_data': 'check_subscription'},
-            {'text': '🔄 Yangilash', 'callback_data': 'refresh_subscription'}
-        ])
+        text += f"\n\n🎯 <b>Professional kino bot - sizning xizmatlaringizda!</b>"
         
         send_message(chat_id, text, keyboard)
-        logger.info(f"📺 Subscription message sent to user {user_id}")
+        logger.info(f"📺 Detailed subscription message sent to user {user_id}: {subscribed_count}/{total_channels}")
         
     except Exception as e:
         logger.error(f"❌ Subscription message error: {e}")
         # Fallback simple message
         simple_text = """📺 <b>Majburiy obuna!</b>
 
-Botdan foydalanish uchun kanallarga obuna bo'ling va /start buyrug'ini qayta yuboring.
+Botdan foydalanish uchun kanallarga obuna bo'ling va tekshirish tugmasini bosing.
 
 🎭 <b>Ultimate Professional Kino Bot</b>"""
         
-        send_message(chat_id, simple_text)
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔍 Tekshirish', 'callback_data': 'check_subscription'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, simple_text, keyboard)
 
 # Professional Channel Management Functions
 def handle_add_channel_menu(chat_id, user_id):
