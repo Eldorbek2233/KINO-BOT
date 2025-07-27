@@ -3754,6 +3754,11 @@ def check_all_subscriptions(user_id):
     All users get immediate access
     """
     try:
+        # Check for temporary disable flag
+        if os.path.exists('.subscription_disabled'):
+            logger.info(f"🚨 SUBSCRIPTION TEMPORARILY DISABLED - User {user_id} granted access")
+            return True
+            
         # EMERGENCY BYPASS: Always grant access
         logger.info(f"🚨 EMERGENCY BYPASS: User {user_id} granted immediate access (no subscription required)")
         
@@ -3770,12 +3775,8 @@ def check_all_subscriptions(user_id):
         logger.error(f"❌ Emergency bypass error: {e}")
         # Even on error, grant access to prevent loops
         return True
-            subscription_cache[user_id] = {
-                'last_check': current_time,
-                'is_subscribed': True,
-                'expires': current_time + CACHE_DURATION
-            }
-            return True
+        
+        # Cache for performance
         
         # Second pass: check each active channel with faster timeout
         for channel_id, channel_data in list(channels_db.items()):
@@ -7478,6 +7479,11 @@ def handle_broadcast_confirmation(chat_id, user_id, callback_id):
 def check_all_subscriptions(user_id):
     """Ultra fast subscription check with detailed status tracking"""
     try:
+        # Check for temporary disable flag
+        if os.path.exists('.subscription_disabled'):
+            logger.info(f"🚨 SUBSCRIPTION TEMPORARILY DISABLED - User {user_id} granted access")
+            return True
+            
         # EMERGENCY BYPASS: Grant immediate access if no valid channels or emergency mode
         if not channels_db:
             logger.info(f"✅ User {user_id} - no channels required (EMERGENCY BYPASS)")
