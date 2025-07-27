@@ -1,4 +1,4 @@
-# Gunicorn configuration file - Railway & Render compatible
+# Gunicorn configuration file for Professional Kino Bot
 import os
 
 # Server socket
@@ -10,13 +10,14 @@ workers = 1
 worker_class = "sync"
 worker_connections = 1000
 timeout = 120
-keepalive = 2
+keepalive = 30
 
 # Restart workers after this many requests, to help control memory usage
 max_requests = 1000
 max_requests_jitter = 100
 
 # Logging
+loglevel = "info"
 accesslog = "-"
 errorlog = "-"
 loglevel = "info"

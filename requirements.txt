@@ -8,3 +8,4 @@ requests==2.31.0
 Werkzeug>=2.3.0
 pymongo==4.5.0
 dnspython==2.4.2
+psutil==5.9.5

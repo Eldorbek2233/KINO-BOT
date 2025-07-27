@@ -8,9 +8,11 @@ Complete and Error-Free Implementation for Render.com with MongoDB
 import os
 import json
 import time
+import sys
 import logging
 import threading
 import requests
+import psutil
 from flask import Flask, request, jsonify
 from datetime import datetime
 from pymongo import MongoClient
@@ -2145,12 +2147,15 @@ def handle_system_menu(chat_id, user_id):
             return
         
         # System statistics
-        import psutil
-        import sys
-        
-        cpu_percent = psutil.cpu_percent(interval=1)
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
+        try:
+            cpu_percent = psutil.cpu_percent(interval=1)
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+        except Exception as e:
+            logger.warning(f"⚠️ psutil error: {e}")
+            cpu_percent = 0
+            memory = type('Memory', (), {'percent': 0, 'used': 0, 'total': 1024*1024*1024})()
+            disk = type('Disk', (), {'percent': 0})()
         
         uptime_seconds = int(time.time())
         
@@ -7258,13 +7263,20 @@ else:
     logger.info("⚠️ MongoDB integration: DISABLED (using file storage)")
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8080))
-    logger.info(f"🎭 Professional Kino Bot starting on port {port}")
-    logger.info(f"📊 Database: MongoDB {'✅' if mongodb_status else '❌'} + JSON backup ✅")
-    
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        debug=False,
-        threaded=True
-    )
+    try:
+        # Initialize bot first
+        initialize_bot()
+        
+        # Start Flask server
+        port = int(os.environ.get('PORT', 8080))
+        logger.info(f"🎭 Professional Kino Bot starting on port {port}")
+        logger.info(f"📊 Database: MongoDB {'✅' if is_mongodb_available() else '❌'} + JSON backup ✅")
+        
+        app.run(
+            host='0.0.0.0',
+            port=port,
+            debug=False,
+            threaded=True
+        )
+    except Exception as e:
+        logger.error(f"❌ Bot startup error: {e}")

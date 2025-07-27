@@ -3,13 +3,15 @@ services:
     name: kino-bot
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python render_simple.py"
+    startCommand: "gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --keep-alive 30 --workers 1"
     plan: free
     envVars:
       - key: BOT_TOKEN
         value: "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
       - key: ADMIN_ID
         value: "5542016161"
+      - key: MONGODB_URI
+        value: "mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster"
       - key: RENDER_ENVIRONMENT
         value: "production"
       - key: PORT
