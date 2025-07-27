@@ -2772,7 +2772,6 @@ def handle_add_channel_session(chat_id, message):
         step = session.get('step', session.get('status', ''))
         
         if step == 'waiting_channel_id' or step == 'waiting_channel_info':
-        if step == 'waiting_channel_id' or step == 'waiting_channel_info':
             # Validate channel info
             channel_info = text
             
