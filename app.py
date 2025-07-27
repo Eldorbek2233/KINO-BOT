@@ -1089,6 +1089,14 @@ def handle_callback_query(callback_query):
                 handle_channel_removal_confirmation(chat_id, user_id, channel_id, callback_id)
             else:
                 answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+                
+        elif data == 'remove_channel':
+            # Handle remove channel menu
+            if user_id == ADMIN_ID:
+                handle_remove_channel_menu(chat_id, user_id)
+                answer_callback_query(callback_id, "🗑 Kanal o'chirish")
+            else:
+                answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
             
         elif data == 'back_to_start':
             user_info = users_db.get(str(user_id), {})
