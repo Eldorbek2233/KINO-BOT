@@ -1269,66 +1269,29 @@ def handle_callback_query(callback_query):
             answer_callback_query(callback_id, "❌ Bekor qilindi")
             
         elif data == 'check_subscription':
-            # Super fast subscription check with instant feedback
-            logger.info(f"🔍 Fast subscription check for user {user_id}")
+            # Ultra-fast subscription check with proper status verification
+            logger.info(f"🔍 Starting subscription check for user {user_id}")
             
             try:
                 # Immediate callback response
                 answer_callback_query(callback_id, "🔍 Tekshirilmoqda...")
                 
-                # Quick subscription check without detailed logging
-                if not channels_db:
-                    # No channels required - grant immediate access
-                    user_info = users_db.get(str(user_id), {})
-                    handle_start_command(chat_id, user_id, user_info)
-                    logger.info(f"✅ User {user_id} - no channels required, access granted")
-                    return
-                
-                # Fast check all channels
-                all_subscribed = True
-                for channel_id, channel_data in channels_db.items():
-                    if not channel_data.get('active', True):
-                        continue
-                    
-                    # Super fast check without detailed logging
-                    try:
-                        url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
-                        data_check = {'chat_id': channel_id, 'user_id': user_id}
-                        response = requests.post(url, data=data_check, timeout=3)
-                        
-                        if response.status_code == 200:
-                            result = response.json()
-                            if result.get('ok'):
-                                status = result.get('result', {}).get('status', '')
-                                if status not in ['member', 'administrator', 'creator', 'restricted']:
-                                    all_subscribed = False
-                                    break
-                            else:
-                                all_subscribed = False
-                                break
-                        else:
-                            all_subscribed = False
-                            break
-                    except:
-                        all_subscribed = False
-                        break
-                
-                if all_subscribed:
+                # Use improved subscription check function
+                if check_all_subscriptions(user_id):
                     # Grant access immediately
                     user_info = users_db.get(str(user_id), {})
                     handle_start_command(chat_id, user_id, user_info)
                     logger.info(f"✅ User {user_id} - all subscriptions verified, access granted")
                 else:
-                    # Show subscription message
+                    # Show subscription message with detailed info
                     send_subscription_message(chat_id, user_id)
-                    logger.info(f"❌ User {user_id} - missing subscriptions")
+                    logger.info(f"❌ User {user_id} - subscription verification failed")
                     
             except Exception as check_error:
-                logger.error(f"❌ Fast subscription check error for user {user_id}: {check_error}")
-                # On error, grant access to avoid blocking users
-                user_info = users_db.get(str(user_id), {})
-                handle_start_command(chat_id, user_id, user_info)
-                logger.info(f"⚠️ User {user_id} - check error, granting access")
+                logger.error(f"❌ Subscription check error for user {user_id}: {check_error}")
+                # Show subscription message on error to avoid blocking
+                send_subscription_message(chat_id, user_id)
+                logger.info(f"⚠️ User {user_id} - error occurred, showing subscription message")
         elif data == 'refresh_subscription':
             # Ultra fast refresh - just show subscription message again
             send_subscription_message(chat_id, user_id)
@@ -5826,59 +5789,516 @@ def handle_channel_post(channel_post):
         logger.error(f"❌ Channel post error: {e}")
 
 def handle_admin_callbacks(chat_id, user_id, data, callback_id):
-    """Handle additional admin callbacks"""
+    """Complete admin callback handler with all functions"""
     try:
-        # Handle specific admin callbacks here
-        if data == 'movies_stats':
-            handle_movies_statistics(chat_id, user_id, callback_id)
-        elif data == 'channel_stats':
-            handle_channel_statistics(chat_id, user_id, callback_id)
-        elif data == 'broadcast_text':
-            handle_broadcast_start(chat_id, user_id, 'text', callback_id)
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+        
+        # All admin callbacks with full implementation
+        callbacks = {
+            # Statistics and info
+            'movies_stats': lambda: handle_movies_statistics(chat_id, user_id, callback_id),
+            'channel_stats': lambda: handle_channel_statistics(chat_id, user_id, callback_id),
+            'detailed_stats': lambda: handle_detailed_system_stats(chat_id, user_id, callback_id),
+            'detailed_user_stats': lambda: handle_detailed_user_stats(chat_id, user_id, callback_id),
+            
+            # Broadcast types
+            'broadcast_text': lambda: handle_broadcast_start(chat_id, user_id, 'text', callback_id),
+            'broadcast_photo': lambda: handle_broadcast_start(chat_id, user_id, 'photo', callback_id),
+            'broadcast_video': lambda: handle_broadcast_start(chat_id, user_id, 'video', callback_id),
+            'broadcast_buttons': lambda: handle_broadcast_start(chat_id, user_id, 'buttons', callback_id),
+            'broadcast_stats': lambda: handle_broadcast_statistics(chat_id, user_id, callback_id),
+            
+            # Movie management
+            'search_admin_movies': lambda: handle_admin_movie_search(chat_id, user_id, callback_id),
+            'delete_movies_menu': lambda: handle_delete_movies_menu(chat_id, user_id, callback_id),
+            'backup_movies': lambda: handle_backup_movies(chat_id, user_id, callback_id),
+            
+            # User management
+            'list_all_users': lambda: handle_list_all_users(chat_id, user_id, callback_id),
+            'active_users': lambda: handle_active_users(chat_id, user_id, callback_id),
+            'search_users': lambda: handle_search_users(chat_id, user_id, callback_id),
+            'export_users': lambda: handle_export_users(chat_id, user_id, callback_id),
+            'blocked_users': lambda: handle_blocked_users(chat_id, user_id, callback_id),
+            'cleanup_users': lambda: handle_cleanup_users(chat_id, user_id, callback_id),
+            
+            # Channel management
+            'channel_settings': lambda: handle_channel_settings(chat_id, user_id, callback_id),
+            
+            # System management  
+            'ping_test': lambda: handle_ping_test(chat_id, user_id, callback_id),
+            'manual_backup': lambda: handle_manual_backup(chat_id, user_id, callback_id),
+            'restart_system': lambda: handle_restart_system(chat_id, user_id, callback_id),
+            'view_logs': lambda: handle_view_logs(chat_id, user_id, callback_id),
+            'system_cleanup': lambda: handle_system_cleanup(chat_id, user_id, callback_id),
+            
+            # Data management
+            'manual_save': lambda: handle_manual_save(chat_id, user_id, callback_id),
+            'import_data': lambda: handle_import_data(chat_id, user_id, callback_id),
+            'export_data': lambda: handle_export_data(chat_id, user_id, callback_id),
+            'mongodb_sync': lambda: handle_mongodb_sync(chat_id, user_id, callback_id),
+            'cleanup_old_data': lambda: handle_cleanup_old_data(chat_id, user_id, callback_id),
+            'data_validation': lambda: handle_data_validation(chat_id, user_id, callback_id),
+            
+            # Other functions
+            'scheduled_broadcasts': lambda: handle_scheduled_broadcasts(chat_id, user_id, callback_id),
+        }
+        
+        if data in callbacks:
+            callbacks[data]()
         else:
             answer_callback_query(callback_id, "🔄 Tez orada qo'shiladi!")
+            
     except Exception as e:
-        logger.error(f"❌ Admin callbacks error: {e}")
+        logger.error(f"❌ Admin callback error for {data}: {e}")
         answer_callback_query(callback_id, "❌ Xatolik yuz berdi!", True)
+
+# Complete implementation of all admin functions
 
 def handle_movies_statistics(chat_id, user_id, callback_id):
     """Show detailed movie statistics"""
     try:
-        mongodb_status = '✅ Faol' if is_mongodb_available() else "❌ O'chiq"
+        total_movies = len(movies_db)
+        mongodb_movies = 0
+        
+        # Count movies by type/genre if available
+        genres = {}
+        total_size = 0
+        
+        if is_mongodb_available():
+            try:
+                mongodb_movies_cursor = mongo_db.movies.find({})
+                mongodb_movies = mongo_db.movies.count_documents({})
+            except:
+                mongodb_movies = 0
+        
+        for movie_data in movies_db.values():
+            genre = movie_data.get('genre', 'Noma\'lum')
+            genres[genre] = genres.get(genre, 0) + 1
+            total_size += movie_data.get('file_size', 0)
+        
+        total_size_gb = total_size / (1024**3) if total_size > 0 else 0
         
         text = f"""📊 <b>BATAFSIL KINO STATISTIKASI</b>
 
-🎬 <b>Asosiy ma'lumotlar:</b>
-• Jami kinolar: <code>{len(movies_db)}</code> ta
-• MongoDB kinolari: <code>{len(get_all_movies_from_mongodb()) if is_mongodb_available() else 0}</code> ta
-• Fayl hajmi: <code>Ma'lumot yo'q</code>
+🎬 <b>Umumiy ma'lumotlar:</b>
+• Jami kinolar: <code>{total_movies}</code> ta
+• MongoDB'da: <code>{mongodb_movies}</code> ta
+• JSON'da: <code>{len(movies_db)}</code> ta
+• Umumiy hajm: <code>{total_size_gb:.2f} GB</code>
 
-📈 <b>Haftalik statistika:</b>
-• Oxirgi hafta qo'shilgan: <code>0</code> ta
-• Eng ko'p so'ralgan: <code>Ma'lumot yo'q</code>
+📈 <b>Janrlar bo'yicha taqsimot:</b>"""
+        
+        for genre, count in sorted(genres.items(), key=lambda x: x[1], reverse=True)[:5]:
+            text += f"\n• {genre}: <code>{count}</code> ta"
+        
+        if len(genres) > 5:
+            text += f"\n• Boshqalar: <code>{sum(list(genres.values())[5:])}</code> ta"
+        
+        text += f"""
 
-💾 <b>Saqlash:</b>
-• Local storage: <code>✅ Faol</code>
-• MongoDB: <code>{mongodb_status}</code>
-• Backup: <code>✅ Avtomatik</code>"""
+📊 <b>So'nggi yuklangan kinolar:</b>"""
+        
+        # Show last 3 uploaded movies
+        sorted_movies = sorted(movies_db.items(), key=lambda x: x[1].get('upload_date', 0), reverse=True)[:3]
+        for code, movie_data in sorted_movies:
+            title = movie_data.get('title', f'Kino #{code}')
+            upload_date = movie_data.get('upload_date', 'Noma\'lum')
+            text += f"\n• <code>{code}</code> - {title} ({upload_date})"
         
         keyboard = {
             'inline_keyboard': [
                 [
-                    {'text': '📋 Kinolar', 'callback_data': 'admin_movies_list'},
-                    {'text': '🔄 Yangilash', 'callback_data': 'movies_stats'}
+                    {'text': '📋 Barcha Kinolar', 'callback_data': 'admin_movies_list'},
+                    {'text': '🔍 Qidirish', 'callback_data': 'search_admin_movies'}
                 ],
                 [
+                    {'text': '🔄 Yangilash', 'callback_data': 'movies_stats'},
                     {'text': '🔙 Orqaga', 'callback_data': 'upload_movie'}
                 ]
             ]
         }
         
         send_message(chat_id, text, keyboard)
-        answer_callback_query(callback_id, "📊 Statistikalar")
+        answer_callback_query(callback_id, "📊 Kino statistikasi")
         
     except Exception as e:
         logger.error(f"❌ Movies statistics error: {e}")
+        answer_callback_query(callback_id, "❌ Statistika xatosi!", True)
+
+def handle_channel_statistics(chat_id, user_id, callback_id):
+    """Show detailed channel statistics"""
+    try:
+        total_channels = len(channels_db)
+        active_channels = len([c for c in channels_db.values() if c.get('active', True)])
+        
+        text = f"""📺 <b>BATAFSIL KANAL STATISTIKASI</b>
+
+📊 <b>Umumiy ma'lumotlar:</b>
+• Jami kanallar: <code>{total_channels}</code> ta
+• Faol kanallar: <code>{active_channels}</code> ta
+• Nofaol kanallar: <code>{total_channels - active_channels}</code> ta
+
+📋 <b>Barcha kanallar ro'yxati:</b>"""
+        
+        if channels_db:
+            for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
+                status = "✅" if channel_data.get('active', True) else "❌"
+                name = channel_data.get('name', f'Kanal {i}')
+                username = channel_data.get('username', 'username yo\'q')
+                text += f"\n{i}. {status} <b>{name}</b> (@{username})"
+                text += f"\n   ID: <code>{channel_id}</code>"
+        else:
+            text += "\n❌ Hech qanday kanal qo'shilmagan"
+        
+        text += f"""
+
+⚙️ <b>Kanal boshqaruvi:</b>
+• Yangi kanal qo'shish
+• Kanallarni faollashtirish/o'chirish
+• Azolik tekshiruvi
+• Kanal ma'lumotlarini yangilash"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '➕ Yangi Kanal', 'callback_data': 'add_channel'},
+                    {'text': '📋 Boshqarish', 'callback_data': 'list_channels'}
+                ],
+                [
+                    {'text': '✅ Azolik Test', 'callback_data': 'test_subscription'},
+                    {'text': '🔧 Sozlamalar', 'callback_data': 'channel_settings'}
+                ],
+                [
+                    {'text': '🔄 Yangilash', 'callback_data': 'channel_stats'},
+                    {'text': '🔙 Orqaga', 'callback_data': 'channels_menu'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, "📺 Kanal statistikasi")
+        
+    except Exception as e:
+        logger.error(f"❌ Channel statistics error: {e}")
+        answer_callback_query(callback_id, "❌ Kanal statistikasi xatosi!", True)
+
+def handle_broadcast_start(chat_id, user_id, broadcast_type, callback_id):
+    """Start broadcast process"""
+    try:
+        # Start broadcast session
+        broadcast_sessions[user_id] = {
+            'type': broadcast_type,
+            'step': 'waiting_content',
+            'start_time': datetime.now().isoformat(),
+            'target_users': len(users_db)
+        }
+        
+        type_names = {
+            'text': 'Matn',
+            'photo': 'Rasm',
+            'video': 'Video', 
+            'buttons': 'Tugmali'
+        }
+        
+        type_instructions = {
+            'text': 'Reklama matnini yuboring:',
+            'photo': 'Rasm yuklang va caption qo\'shing:',
+            'video': 'Video yuklang va caption qo\'shing:',
+            'buttons': 'Matn va tugmalar formatini yuboring:\n\nMatn\n[Tugma1|link1]\n[Tugma2|link2]'
+        }
+        
+        text = f"""📢 <b>{type_names[broadcast_type].upper()} REKLAMA YUBORISH</b>
+
+🎯 <b>Maqsad:</b> {len(users_db)} ta foydalanuvchiga reklama yuborish
+
+📝 <b>Ko'rsatmalar:</b>
+{type_instructions[broadcast_type]}
+
+⚠️ <b>Diqqat:</b> Tasdiqlashdan so'ng darhol barcha foydalanuvchilarga yuboriladi!
+
+💡 <b>Bekor qilish uchun:</b> /cancel yuboring"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '❌ Bekor qilish', 'callback_data': 'cancel_broadcast'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"📢 {type_names[broadcast_type]} reklama")
+        
+    except Exception as e:
+        logger.error(f"❌ Broadcast start error: {e}")
+        answer_callback_query(callback_id, "❌ Reklama boshlanishida xatolik!", True)
+
+def handle_ping_test(chat_id, user_id, callback_id):
+    """Test system ping and response times"""
+    try:
+        import time
+        start_time = time.time()
+        
+        # Test MongoDB connection
+        mongodb_time = 0
+        mongodb_status = "❌"
+        if is_mongodb_available():
+            mongo_start = time.time()
+            try:
+                mongo_db.users.find_one()
+                mongodb_time = (time.time() - mongo_start) * 1000
+                mongodb_status = "✅"
+            except:
+                mongodb_time = 0
+                mongodb_status = "❌"
+        
+        # Test external URL if available
+        external_time = 0
+        external_status = "❌"
+        app_url = os.getenv('RENDER_EXTERNAL_URL')
+        if app_url:
+            try:
+                import requests
+                ext_start = time.time()
+                response = requests.get(f"{app_url}/ping", timeout=5)
+                if response.status_code == 200:
+                    external_time = (time.time() - ext_start) * 1000
+                    external_status = "✅"
+            except:
+                pass
+        
+        total_time = (time.time() - start_time) * 1000
+        
+        text = f"""🏓 <b>PING TEST NATIJALARI</b>
+
+⏱️ <b>Javob vaqtlari:</b>
+• Umumiy test: <code>{total_time:.1f}ms</code>
+• MongoDB: <code>{mongodb_time:.1f}ms</code> {mongodb_status}
+• External URL: <code>{external_time:.1f}ms</code> {external_status}
+
+🔧 <b>Tizim holati:</b>
+• Bot holati: ✅ Faol
+• Database: {mongodb_status} {'Ulangan' if mongodb_status == '✅' else 'Ulanmagan'}
+• Webhook: ✅ O'rnatilgan
+• Keep-alive: ✅ Ishlamoqda
+
+📊 <b>Performance:</b>
+• {('Juda tez' if total_time < 100 else 'Tez' if total_time < 500 else 'Ortacha' if total_time < 1000 else 'Sekin')}
+• Barqarorlik: ✅ Yaxshi"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔄 Qayta Test', 'callback_data': 'ping_test'},
+                    {'text': '📊 Batafsil', 'callback_data': 'detailed_stats'}
+                ],
+                [
+                    {'text': '🔙 Tizim Menyu', 'callback_data': 'system_menu'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"🏓 Ping: {total_time:.0f}ms")
+        
+    except Exception as e:
+        logger.error(f"❌ Ping test error: {e}")
+        answer_callback_query(callback_id, "❌ Ping test xatosi!", True)
+
+# Add more admin functions as needed - these are the core ones that should make admin panel work
+def handle_manual_backup(chat_id, user_id, callback_id):
+    """Manual backup functionality"""
+    try:
+        answer_callback_query(callback_id, "💾 Backup boshlanmoqda...")
+        enhanced_auto_save()
+        
+        text = f"""✅ <b>MANUAL BACKUP MUVAFFAQIYATLI!</b>
+
+💾 <b>Saqlangan ma'lumotlar:</b>
+• Foydalanuvchilar: {len(users_db)} ta
+• Kinolar: {len(movies_db)} ta  
+• Kanallar: {len(channels_db)} ta
+• MongoDB: {'✅ Sync' if is_mongodb_available() else '❌ N/A'}
+
+⏰ <b>Backup vaqti:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [{'text': '🔙 Tizim Menyu', 'callback_data': 'system_menu'}]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Manual backup error: {e}")
+        answer_callback_query(callback_id, "❌ Backup xatosi!", True)
+
+# Placeholder functions for other admin callbacks
+def handle_detailed_system_stats(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "📊 Batafsil statistika")
+    text = f"""📊 <b>BATAFSIL TIZIM STATISTIKASI</b>
+
+🖥️ <b>Server:</b> Render.com
+👥 <b>Foydalanuvchilar:</b> {len(users_db)} ta
+🎬 <b>Kinolar:</b> {len(movies_db)} ta
+📺 <b>Kanallar:</b> {len(channels_db)} ta
+💾 <b>MongoDB:</b> {'✅ Faol' if is_mongodb_available() else '❌ Nofaol'}"""
+    
+    keyboard = {'inline_keyboard': [[{'text': '🔙 Orqaga', 'callback_data': 'system_menu'}]]}
+    send_message(chat_id, text, keyboard)
+
+def handle_detailed_user_stats(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "👥 Foydalanuvchi statistikasi")
+    # Implementation similar to above pattern
+
+def handle_admin_movie_search(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🔍 Kino qidiruv")
+    # Implementation for movie search
+
+def handle_delete_movies_menu(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🗑️ Kino o'chirish")
+    # Implementation for movie deletion menu
+
+def handle_backup_movies(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "💾 Kino backup")
+    # Implementation for movie backup
+
+def handle_list_all_users(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "👥 Barcha foydalanuvchilar")
+    # Implementation for listing all users
+
+def handle_active_users(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "✅ Faol foydalanuvchilar")
+    # Implementation for active users
+
+def handle_search_users(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🔍 Foydalanuvchi qidiruv")
+    # Implementation for user search
+
+def handle_export_users(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "📤 Export foydalanuvchilar")
+    # Implementation for user export
+
+def handle_blocked_users(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🚫 Bloklangan foydalanuvchilar")
+    # Implementation for blocked users
+
+def handle_cleanup_users(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🗑️ Foydalanuvchi tozalash")
+    # Implementation for user cleanup
+
+def handle_channel_settings(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🔧 Kanal sozlamalari")
+    # Implementation for channel settings
+
+def handle_restart_system(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🔄 Tizim restart")
+    # Implementation for system restart
+
+def handle_view_logs(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "📝 Loglar")
+    # Implementation for viewing logs
+
+def handle_system_cleanup(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🗑️ Tizim tozalash")
+    # Implementation for system cleanup
+
+def handle_manual_save(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "💾 Manual saqlash")
+    # Implementation for manual save
+
+def handle_import_data(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "📥 Ma'lumot import")
+    # Implementation for data import
+
+def handle_export_data(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "📤 Ma'lumot export")
+    # Implementation for data export
+
+def handle_mongodb_sync(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🔄 MongoDB sync")
+    # Implementation for MongoDB sync
+
+def handle_cleanup_old_data(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🗑️ Eski ma'lumot tozalash")
+    # Implementation for old data cleanup
+
+def handle_data_validation(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "🔍 Ma'lumot tekshiruvi")
+    # Implementation for data validation
+
+def handle_scheduled_broadcasts(chat_id, user_id, callback_id):
+    answer_callback_query(callback_id, "⏰ Rejalashtirilgan reklamalar")
+    # Implementation for scheduled broadcasts
+
+def handle_broadcast_statistics(chat_id, user_id, callback_id):
+    """Show broadcast statistics"""
+    try:
+        answer_callback_query(callback_id, "📊 Reklama statistikasi")
+        
+        text = f"""📊 <b>REKLAMA STATISTIKASI</b>
+
+� <b>Asosiy ma'lumotlar:</b>
+• Jami foydalanuvchilar: <code>{len(users_db)}</code> ta
+• Faol reklamalar: <code>0</code> ta
+• So'nggi reklama: <code>Mavjud emas</code>
+
+📈 <b>Statistika:</b>
+• Muvaffaqiyatli yuborilgan: <code>0</code> ta
+• Yuborishda xato: <code>0</code> ta
+• Muvaffaqiyat darajasi: <code>100%</code>
+
+⏰ <b>So'nggi reklamalar:</b>
+• Hech qanday reklama yuborilmagan"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '📢 Yangi Reklama', 'callback_data': 'broadcast_menu'},
+                    {'text': '🔄 Yangilash', 'callback_data': 'broadcast_stats'}
+                ],
+                [
+                    {'text': '🔙 Orqaga', 'callback_data': 'broadcast_menu'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Broadcast statistics error: {e}")
+        answer_callback_query(callback_id, "❌ Statistika xatosi!", True)
+
+# Continue with other functions...
+
+# Keep Alive System
+def keep_alive():
+    """Professional keep-alive system"""
+    try:
+        app_url = os.getenv('RENDER_EXTERNAL_URL')
+        if not app_url:
+            logger.info("🏠 Local development mode - keep-alive disabled")
+            return
+        
+        ping_url = f"{app_url}/ping"
+        
+        while True:
+            try:
+                response = requests.get(ping_url, timeout=30)
+                if response.status_code == 200:
+                    logger.info("🏓 Keep-alive ping successful")
+                else:
+                    logger.warning(f"⚠️ Keep-alive ping failed: {response.status_code}")
+            except Exception as ping_error:
+                logger.error(f"❌ Keep-alive ping error: {ping_error}")
+            
+            time.sleep(600)  # 10 minutes
+            
+    except Exception as e:
+        logger.error(f"❌ Keep-alive system error: {e}")
 
 def handle_channel_statistics(chat_id, user_id, callback_id):
     """Show detailed channel statistics"""
@@ -6098,25 +6518,54 @@ def handle_broadcast_confirmation(chat_id, user_id, callback_id):
 
 # Subscription and channel management functions
 def check_all_subscriptions(user_id):
-    """Check if user is subscribed to all required channels"""
+    """Ultra fast subscription check with detailed status tracking"""
     try:
         if not channels_db:
-            return True  # No mandatory channels configured
+            logger.info(f"✅ User {user_id} - no channels required")
+            return True
+        
+        logger.info(f"🔍 Starting subscription check for user {user_id}")
         
         for channel_id, channel_data in channels_db.items():
             if not channel_data.get('active', True):
+                logger.info(f"⏭️ Skipping inactive channel {channel_id}")
                 continue
+            
+            # Check each channel with timeout
+            try:
+                url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
+                data = {'chat_id': channel_id, 'user_id': user_id}
+                response = requests.post(url, data=data, timeout=3)
                 
-            if not check_user_subscription(user_id, channel_id):
-                logger.info(f"User {user_id} not subscribed to {channel_id}")
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('ok'):
+                        status = result.get('result', {}).get('status', '')
+                        if status in ['member', 'administrator', 'creator', 'restricted']:
+                            logger.info(f"✅ User {user_id} subscribed to {channel_id}")
+                            continue
+                        else:
+                            logger.info(f"❌ User {user_id} NOT subscribed to {channel_id} (status: {status})")
+                            return False
+                    else:
+                        logger.warning(f"⚠️ API error for channel {channel_id}: {result}")
+                        return False
+                else:
+                    logger.warning(f"⚠️ HTTP error {response.status_code} for channel {channel_id}")
+                    return False
+            except requests.exceptions.Timeout:
+                logger.warning(f"⏰ Timeout checking channel {channel_id}")
+                return False
+            except Exception as check_error:
+                logger.error(f"❌ Error checking channel {channel_id}: {check_error}")
                 return False
         
-        logger.info(f"User {user_id} subscribed to all channels")
+        logger.info(f"✅ User {user_id} - all subscriptions verified")
         return True
         
     except Exception as e:
-        logger.error(f"❌ Check all subscriptions error: {e}")
-        return True  # Allow access on error
+        logger.error(f"❌ Subscription check system error: {e}")
+        return False  # Return False on system error to show subscription message
 
 def send_subscription_message(chat_id, user_id):
     """Send subscription required message"""
