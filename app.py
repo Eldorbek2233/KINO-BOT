@@ -2694,7 +2694,7 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
         answer_callback_query(callback_id, "❌ Xatolik!", True)
 
 def handle_add_channel_session(chat_id, message):
-    """Handle add channel session"""
+    """Handle add channel session - FIXED VERSION"""
     try:
         user_id = message.get('from', {}).get('id')
         text = message.get('text', '').strip()
@@ -2703,7 +2703,10 @@ def handle_add_channel_session(chat_id, message):
         if not session or session.get('type') != 'add_channel':
             return
         
-        if session.get('status') == 'waiting_channel_info':
+        step = session.get('step', session.get('status', ''))
+        
+        if step == 'waiting_channel_id' or step == 'waiting_channel_info':
+        if step == 'waiting_channel_id' or step == 'waiting_channel_info':
             # Validate channel info
             channel_info = text
             
@@ -2711,28 +2714,77 @@ def handle_add_channel_session(chat_id, message):
                 send_message(chat_id, "❌ Kanal ma'lumotlarini yuboring!")
                 return
             
-            # Parse channel info
+            # Parse channel info - IMPROVED
             if channel_info.startswith('@'):
-                # Username format
+                # Username format: @channel_name
                 channel_username = channel_info
-                channel_id = channel_info  # Will be converted to ID later
+                channel_id = channel_info  # Keep as username for Telegram API
                 channel_name = channel_info[1:]  # Remove @
-            elif channel_info.startswith('-'):
-                # ID format
+            elif channel_info.startswith('-100'):
+                # Full channel ID format: -1001234567890
                 try:
-                    channel_id = int(channel_info)
+                    channel_id = channel_info  # Keep as string
                     channel_username = channel_info
                     channel_name = f"Kanal {channel_info}"
                 except:
                     send_message(chat_id, "❌ Noto'g'ri kanal ID format!")
                     return
+            elif channel_info.isdigit() or (channel_info.startswith('-') and channel_info[1:].isdigit()):
+                # Simple ID format: -123456789 or 123456789
+                try:
+                    if not channel_info.startswith('-'):
+                        channel_id = f"-100{channel_info}"  # Add -100 prefix for supergroups
+                    else:
+                        channel_id = channel_info
+                    channel_username = channel_id
+                    channel_name = f"Kanal {channel_info}"
+                except:
+                    send_message(chat_id, "❌ Noto'g'ri kanal ID format!")
+                    return
+            elif not channel_info.startswith('@') and not channel_info.startswith('-'):
+                # Plain username without @
+                channel_username = f"@{channel_info}"
+                channel_id = f"@{channel_info}"
+                channel_name = channel_info
             else:
-                send_message(chat_id, "❌ Kanal @ yoki - bilan boshlanishi kerak!")
+                send_message(chat_id, "❌ Noto'g'ri format! @username yoki -1001234567890 formatda kiriting!")
                 return
             
-            # Ask for channel name
+            # Test channel access before saving
+            try:
+                url = f"https://api.telegram.org/bot{TOKEN}/getChat"
+                data = {'chat_id': channel_id}
+                response = requests.post(url, data=data, timeout=10)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('ok'):
+                        chat_info = result.get('result', {})
+                        actual_channel_name = chat_info.get('title', channel_name)
+                        channel_type = chat_info.get('type', 'unknown')
+                        
+                        if channel_type not in ['channel', 'supergroup']:
+                            send_message(chat_id, f"❌ Bu kanal yoki supergroup emas! Tur: {channel_type}")
+                            return
+                        
+                        # Update with actual info
+                        channel_name = actual_channel_name
+                        logger.info(f"✅ Channel verified: {channel_name} ({channel_id})")
+                    else:
+                        error_desc = result.get('description', 'Unknown error')
+                        send_message(chat_id, f"❌ Kanal tekshirishda xatolik: {error_desc}")
+                        return
+                else:
+                    send_message(chat_id, f"❌ Telegram API xatolik: {response.status_code}")
+                    return
+            except Exception as e:
+                logger.error(f"❌ Channel verification error: {e}")
+                send_message(chat_id, "❌ Kanalni tekshirib bo'lmadi. Internet aloqasini tekshiring.")
+                return
+            
+            # Ask for channel name confirmation
             session.update({
-                'status': 'waiting_channel_name',
+                'step': 'waiting_channel_name',
                 'channel_id': channel_id,
                 'channel_username': channel_username,
                 'suggested_name': channel_name
@@ -2757,7 +2809,8 @@ def handle_add_channel_session(chat_id, message):
             
             send_message(chat_id, text, keyboard)
             
-        elif session.get('status') == 'waiting_channel_name':
+        elif step == 'waiting_channel_name':
+        elif step == 'waiting_channel_name':
             # Get channel name
             if text.lower() in ['ok', 'ha', 'yes']:
                 channel_name = session.get('suggested_name')
@@ -2768,9 +2821,16 @@ def handle_add_channel_session(chat_id, message):
             channel_id = session.get('channel_id')
             channel_username = session.get('channel_username')
             
-            # Save channel
+            # Test subscription before saving
+            try:
+                test_result = check_user_subscription_fast(user_id, channel_id)
+                logger.info(f"🔍 Admin subscription test for {channel_id}: {test_result}")
+            except Exception as e:
+                logger.error(f"❌ Subscription test error: {e}")
+            
+            # Save channel with proper key format
             channel_data = {
-                'channel_id': str(channel_id),
+                'channel_id': channel_id,  # Keep original format
                 'name': channel_name,
                 'username': channel_username,
                 'url': f"https://t.me/{channel_username[1:]}" if channel_username.startswith('@') else '#',
@@ -2779,16 +2839,24 @@ def handle_add_channel_session(chat_id, message):
                 'added_by': user_id
             }
             
-            # Save to memory
+            # Save to memory with string key
             channels_db[str(channel_id)] = channel_data
+            logger.info(f"💾 Channel saved to memory: {channel_id} -> {channel_name}")
             
             # Save to MongoDB if available
             if is_mongodb_available():
-                save_channel_to_mongodb(channel_data)
-                logger.info(f"📺 Channel saved to MongoDB: {channel_id}")
+                try:
+                    save_channel_to_mongodb(channel_data)
+                    logger.info(f"📺 Channel saved to MongoDB: {channel_id}")
+                except Exception as e:
+                    logger.error(f"❌ MongoDB save error: {e}")
             
             # Auto-save to files (backup)
-            auto_save_data()
+            try:
+                auto_save_data()
+                logger.info("💾 Channels auto-saved to files")
+            except Exception as e:
+                logger.error(f"❌ Auto-save error: {e}")
             
             # Clean up session
             del upload_sessions[user_id]
@@ -2796,29 +2864,42 @@ def handle_add_channel_session(chat_id, message):
             text = f"""✅ <b>Kanal muvaffaqiyatli qo'shildi!</b>
 
 📺 <b>Kanal nomi:</b> {channel_name}
-🔗 <b>Kanal:</b> <code>{channel_username}</code>
+🔗 <b>Kanal ID:</b> <code>{channel_id}</code>
 📅 <b>Qo'shilgan vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M')}
-📊 <b>Jami kanallar:</b> {len(channels_db)} ta
+👤 <b>Qo'shgan admin:</b> <code>{user_id}</code>
 
-💡 <b>Endi majburiy obuna tizimi faol!</b>"""
+🎯 <b>Endi foydalanuvchilar bu kanalga obuna bo'lish majbur!</b>
+
+💡 <b>Test uchun:</b> /start buyrug'ini oddiy foydalanuvchi sifatida yuboring."""
 
             keyboard = {
                 'inline_keyboard': [
                     [
-                        {'text': '➕ Yana kanal qo\'shish', 'callback_data': 'add_channel'},
-                        {'text': '📺 Kanal boshqaruvi', 'callback_data': 'channels_admin'}
+                        {'text': '📺 Kanallar Ro\'yxati', 'callback_data': 'list_channels'},
+                        {'text': '🔧 Test Obuna', 'callback_data': 'test_subscription'}
                     ],
                     [
-                        {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                        {'text': '➕ Yana Kanal Qo\'shish', 'callback_data': 'add_channel'},
+                        {'text': '🔙 Kanallar Menu', 'callback_data': 'channels_menu'}
                     ]
                 ]
             }
             
             send_message(chat_id, text, keyboard)
-            
+            logger.info(f"✅ Channel successfully added: {channel_name} ({channel_id})")
+        
+        else:
+            # Unknown step
+            send_message(chat_id, "❌ Noma'lum qadam. Qaytadan boshlang.")
+            if user_id in upload_sessions:
+                del upload_sessions[user_id]
+                
     except Exception as e:
         logger.error(f"❌ Add channel session error: {e}")
         send_message(chat_id, "❌ Kanal qo'shishda xatolik!")
+        # Clean up session on error
+        if user_id in upload_sessions:
+            del upload_sessions[user_id]
 
 def handle_upload_session(chat_id, message):
     """Handle video upload in professional upload session"""
