@@ -1425,7 +1425,7 @@ def handle_callback_query(callback_query):
         elif data == 'delete_movies':
             # Handle movie deletion menu directly
             if user_id == ADMIN_ID:
-                handle_delete_movies_menu(chat_id, user_id)
+                handle_delete_movies_menu_impl(chat_id, user_id)
                 answer_callback_query(callback_id, "🗑 O'chirish menyusi")
             else:
                 answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
