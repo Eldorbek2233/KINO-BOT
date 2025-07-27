@@ -851,44 +851,44 @@ def handle_message(message):
         
         logger.info(f"💬 Message from {user_id}: {text[:50]}...")
         
-        # Ultra fast subscription check for non-admin users - OPTIMIZED VERSION
+        # STRICT subscription check for non-admin users - NO BYPASS
         if channels_db and user_id != ADMIN_ID:
             try:
-                # Skip subscription check for specific commands after successful verification
-                skip_check_commands = ['/start', '/help']
-                should_skip = any(text.startswith(cmd) for cmd in skip_check_commands)
-                
-                # Also skip if this is a movie request (user already verified)
-                is_movie_request = text and (text.startswith('#') or text.isdigit())
-                
-                if not should_skip and not is_movie_request:
-                    # Quick subscription check without detailed logging
+                # Only skip subscription check for /help command
+                if text == '/help':
+                    # Allow help command without subscription
+                    pass
+                else:
+                    # Check subscription for ALL other interactions
                     needs_subscription = False
                     
                     for channel_id, channel_data in channels_db.items():
                         if not channel_data.get('active', True):
                             continue
                         
-                        # Ultra fast check
+                        # Strict subscription check
                         try:
                             url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
                             data_check = {'chat_id': channel_id, 'user_id': user_id}
-                            response = requests.post(url, data=data_check, timeout=2)
+                            response = requests.post(url, data=data_check, timeout=3)
                             
                             if response.status_code == 200:
                                 result = response.json()
                                 if result.get('ok'):
                                     status = result.get('result', {}).get('status', '')
-                                    if status not in ['member', 'administrator', 'creator', 'restricted']:
+                                    if status not in ['member', 'administrator', 'creator']:
                                         needs_subscription = True
                                         break
                                 else:
+                                    # API error - assume not subscribed
                                     needs_subscription = True
                                     break
                             else:
+                                # HTTP error - assume not subscribed  
                                 needs_subscription = True
                                 break
-                        except:
+                        except Exception as check_err:
+                            logger.warning(f"⚠️ Subscription check failed for {channel_id}: {check_err}")
                             needs_subscription = True
                             break
                     
@@ -897,8 +897,8 @@ def handle_message(message):
                         return
                     
             except Exception as check_error:
-                logger.error(f"❌ Quick subscription check error for user {user_id}: {check_error}")
-                # On error, show subscription message to be safe
+                logger.error(f"❌ Subscription check error for user {user_id}: {check_error}")
+                # On any error, show subscription message to be safe
                 send_subscription_message(chat_id, user_id)
                 return
         
@@ -2713,7 +2713,7 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             
             # Upload callbacks
             'start_upload': lambda: handle_start_upload(chat_id, user_id),
-            'delete_movies': lambda: handle_delete_movies_menu(chat_id, user_id),
+            'delete_movies': lambda: handle_delete_movies_menu(chat_id, user_id, callback_id),
             'admin_movies_list': lambda: handle_admin_movies_list(chat_id, user_id, callback_id),
             'movies_stats': lambda: handle_movies_statistics(chat_id, user_id),
             'movies_backup': lambda: handle_movies_backup(chat_id, user_id),
