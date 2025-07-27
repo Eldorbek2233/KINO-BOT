@@ -964,6 +964,39 @@ def handle_message(message):
             handle_statistics(chat_id, user_id)
         elif text == '/help':
             handle_help_command(chat_id, user_id)
+        elif text == '/cleanup' and user_id == ADMIN_ID:
+            # Quick cleanup command for admin
+            try:
+                invalid_count = 0
+                total_channels = len(channels_db)
+                
+                for channel_id, channel_data in list(channels_db.items()):
+                    if not channel_data.get('active', True):
+                        channel_name = channel_data.get('name', 'Unknown')
+                        logger.info(f"🗑 Removing inactive channel: {channel_name}")
+                        del channels_db[channel_id]
+                        invalid_count += 1
+                
+                # Save changes
+                auto_save_data()
+                
+                result_text = f"""🧹 <b>CHANNEL CLEANUP COMPLETED</b>
+
+📊 <b>Results:</b>
+• Total channels before: <code>{total_channels}</code>
+• Invalid channels removed: <code>{invalid_count}</code>
+• Active channels remaining: <code>{len(channels_db)}</code>
+
+💾 <b>Changes saved successfully!</b>
+
+🎯 <b>Users should now have better access to the bot.</b>"""
+                
+                send_message(chat_id, result_text)
+                logger.info(f"✅ Admin {user_id} performed channel cleanup: {invalid_count} channels removed")
+                
+            except Exception as cleanup_error:
+                logger.error(f"❌ Cleanup command error: {cleanup_error}")
+                send_message(chat_id, f"❌ Cleanup error: {str(cleanup_error)}")
         elif 'video' in message and user_id == ADMIN_ID:
             handle_video_upload(chat_id, message)
         elif 'photo' in message and user_id == ADMIN_ID:
@@ -3566,9 +3599,10 @@ def check_all_subscriptions(user_id):
         failed_channels = []
         success_count = 0
         total_active_channels = 0
+        invalid_channels_found = []
         
         # Check each channel with better error handling
-        for channel_id, channel_data in channels_db.items():
+        for channel_id, channel_data in list(channels_db.items()):  # Use list() to allow modification during iteration
             if not channel_data.get('active', True):
                 logger.info(f"⏭ Channel {channel_id} is inactive, skipping")
                 continue
@@ -3614,7 +3648,9 @@ def check_all_subscriptions(user_id):
                         logger.error(f"❌ API error for channel {channel_name}: {error_desc}")
                         # If API error, check if it's channel-related
                         if 'chat not found' in error_desc.lower() or 'invalid' in error_desc.lower():
-                            logger.warning(f"⚠️ Channel {channel_name} seems invalid - skipping from requirement")
+                            logger.warning(f"⚠️ Channel {channel_name} seems invalid - marking as inactive")
+                            channel_data['active'] = False
+                            invalid_channels_found.append(channel_name)
                             total_active_channels -= 1  # Don't count invalid channels
                         else:
                             failed_channels.append(channel_name)
@@ -3622,12 +3658,14 @@ def check_all_subscriptions(user_id):
                     logger.warning(f"⚠️ HTTP 400 for channel {channel_name} ({channel_id}) - Invalid/inaccessible channel")
                     # Mark channel as inactive to prevent future checks
                     channel_data['active'] = False
+                    invalid_channels_found.append(channel_name)
                     logger.info(f"📝 Marking channel {channel_name} as inactive due to HTTP 400")
                     total_active_channels -= 1  # Don't count invalid channels
                 elif response.status_code == 403:
                     logger.warning(f"⚠️ HTTP 403 for channel {channel_name} ({channel_id}) - Bot forbidden")
-                    # Channel exists but bot doesn't have access
+                    # Channel exists but bot doesn't have access - mark as inactive
                     channel_data['active'] = False
+                    invalid_channels_found.append(channel_name)
                     logger.info(f"📝 Marking channel {channel_name} as inactive due to HTTP 403")
                     total_active_channels -= 1
                 else:
@@ -3641,10 +3679,18 @@ def check_all_subscriptions(user_id):
                 logger.error(f"❌ Exception checking channel {channel_name}: {e}")
                 failed_channels.append(channel_name)
         
+        # Auto-save changes if invalid channels were found
+        if invalid_channels_found:
+            try:
+                auto_save_data()
+                logger.info(f"💾 Auto-saved after marking {len(invalid_channels_found)} channels as inactive")
+            except Exception as save_error:
+                logger.error(f"❌ Failed to save invalid channel changes: {save_error}")
+        
         # Final decision logic
         if total_active_channels == 0:
-            logger.info(f"ℹ️ No valid channels found - user {user_id} gets access")
-            return True
+            logger.info(f"ℹ️ No valid channels found - user {user_id} gets access (all channels were invalid)")
+            return True  # All channels invalid = allow access
         
         logger.info(f"📊 Subscription check result for user {user_id}: {success_count}/{total_active_channels} channels passed")
         
