@@ -1207,12 +1207,12 @@ def handle_message(message):
             pass
 
 def handle_start_command(chat_id, user_id, user_info):
-    """Professional start command with beautiful interface"""
+    """Professional start command with beautiful interface and subscription check"""
     try:
         user_name = user_info.get('first_name', 'Foydalanuvchi')
         
         if user_id == ADMIN_ID:
-            # Admin start message
+            # Admin start message - no subscription check needed
             text = f"""👑 <b>ADMIN PANEL - Ultimate Professional Kino Bot</b>
 
 🎭 Salom {user_name}! Admin panelga xush kelibsiz!
@@ -1253,7 +1253,14 @@ def handle_start_command(chat_id, user_id, user_info):
                 ]
             }
         else:
-            # Regular user start message
+            # STEP 1: CHECK SUBSCRIPTION FOR REGULAR USERS
+            is_subscribed = check_all_subscriptions(user_id)
+            if not is_subscribed:
+                logger.info(f"❌ User {user_id} not subscribed - showing subscription message")
+                send_subscription_message(chat_id, user_id)
+                return
+            
+            # Regular user start message - only shown if subscribed
             text = f"""🎭 <b>Ultimate Professional Kino Bot ga xush kelibsiz!</b>
 
 👋 Salom {user_name}! Eng zamonaviy kino bot xizmatida!
@@ -1277,11 +1284,14 @@ def handle_start_command(chat_id, user_id, user_info):
             # Create simple keyboard without showing movie codes
             keyboard = {'inline_keyboard': []}
             
-            # Add utility buttons
+            # Add utility buttons  
             keyboard['inline_keyboard'].extend([
                 [
-                    {'text': '� Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'},
+                    {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
                     {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
+                ],
+                [
+                    {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
                 ]
             ])
         
@@ -1380,16 +1390,31 @@ def handle_callback_query(callback_query):
             answer_callback_query(callback_id, "📖 Yordam")
             
         elif data == 'search_movies' or data == 'all_movies' or data == 'movies_list':
-            # Foydalanuvchilar uchun kinolar ro'yxati va qidiruv o'chirilgan
+            # Check subscription for all movie-related requests
+            if user_id != ADMIN_ID:
+                is_subscribed = check_all_subscriptions(user_id)
+                if not is_subscribed:
+                    send_subscription_message(chat_id, user_id)
+                    answer_callback_query(callback_id, "❌ Avval kanallarga obuna bo'ling!", True)
+                    return
+            
+            # Foydalanuvchilar uchun kinolar ro'yxati va qidiruv
             if user_id == ADMIN_ID:
                 # Admin uchun ruxsat berilgan
                 if data == 'all_movies':
                     handle_all_movies(chat_id, user_id)
                     answer_callback_query(callback_id, "🎬 Barcha kinolar")
                 elif data == 'movies_list':
-                    handle_movies_list(chat_id, user_id)
-                    answer_callback_query(callback_id, "🎬 Kinolar ro'yxati")
-                else:
+            # Admin va obuna bo'lgan foydalanuvchilar uchun ruxsat
+            if data == 'all_movies':
+                handle_all_movies(chat_id, user_id)
+                answer_callback_query(callback_id, "🎬 Barcha kinolar")
+            elif data == 'movies_list':
+                handle_movies_list(chat_id, user_id)
+                answer_callback_query(callback_id, "🎬 Kinolar ro'yxati")
+            else:
+                # Admin search functionality
+                if user_id == ADMIN_ID:
                     text = """🔍 <b>ADMIN QIDIRUV TIZIMI</b>
 
 🎯 <b>Qidiruv usullari:</b>
@@ -1411,9 +1436,9 @@ def handle_callback_query(callback_query):
                     
                     send_message(chat_id, text, keyboard)
                     answer_callback_query(callback_id, "🔍 Admin qidiruv")
-            else:
-                # Oddiy foydalanuvchilar uchun
-                text = """🎬 <b>Kino qidirish</b>
+                else:
+                    # Subscribed users - show simple search message
+                    text = """🎬 <b>Kino qidirish</b>
 
 📝 <b>Kino kodini to'g'ridan-to'g'ri yuboring:</b>
 • Masalan: <code>123</code>
@@ -1423,18 +1448,43 @@ def handle_callback_query(callback_query):
 @Eldorbek_Xakimxujayev
 
 🎭 <b>Ultimate Professional Kino Bot</b>"""
-                
-                keyboard = {
-                    'inline_keyboard': [
-                        [
-                            {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'},
-                            {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                    
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
+                                {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                            ],
+                            [
+                                {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
+                            ]
                         ]
-                    ]
-                }
-                
-                send_message(chat_id, text, keyboard)
-                answer_callback_query(callback_id, "💡 Kino kodini yuboring")
+                    }
+                    
+                    send_message(chat_id, text, keyboard)
+                    answer_callback_query(callback_id, "💡 Kino kodini yuboring")
+        
+        elif data == 'check_subscription':
+            # Handle subscription check callback
+            if user_id == ADMIN_ID:
+                # Admin always has access
+                user_info = users_db.get(str(user_id), {})
+                handle_start_command(chat_id, user_id, user_info)
+                answer_callback_query(callback_id, "👑 Admin - majburiy azolik yo'q")
+            else:
+                # Check subscription for regular users
+                is_subscribed = check_all_subscriptions(user_id)
+                if is_subscribed:
+                    # User is subscribed - show main menu
+                    user_info = users_db.get(str(user_id), {})
+                    handle_start_command(chat_id, user_id, user_info)
+                    answer_callback_query(callback_id, "✅ Obuna tasdiqlandi!")
+                    logger.info(f"✅ User {user_id} subscription verified via callback")
+                else:
+                    # User is not subscribed - show subscription message again
+                    send_subscription_message(chat_id, user_id)
+                    answer_callback_query(callback_id, "❌ Barcha kanallarga obuna bo'ling!", True)
+                    logger.info(f"❌ User {user_id} subscription failed via callback")
             
         elif data == 'add_channel':
             # Start channel addition process
@@ -1917,8 +1967,18 @@ def handle_statistics(chat_id, user_id):
         send_message(chat_id, "❌ Statistika xatolik!")
 
 def handle_movie_request(chat_id, user_id, code):
-    """Professional movie request handler"""
+    """Professional movie request handler with subscription check"""
     try:
+        # STEP 1: CHECK SUBSCRIPTION FIRST
+        if user_id != ADMIN_ID:  # Admin always has access
+            is_subscribed = check_all_subscriptions(user_id)
+            if not is_subscribed:
+                logger.info(f"❌ User {user_id} tried to access movie {code} but not subscribed")
+                send_subscription_message(chat_id, user_id)
+                return
+            else:
+                logger.info(f"✅ User {user_id} subscription verified for movie {code}")
+        
         # Clean and normalize code
         original_code = code.strip()
         clean_code = code.replace('#', '').strip()
