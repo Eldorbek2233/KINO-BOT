@@ -3702,7 +3702,7 @@ def handle_cleanup_channels(chat_id, user_id):
         send_message(chat_id, "❌ Kanallarni tozalashda xatolik!")
 
 def check_all_subscriptions(user_id):
-    """IMPROVED SUBSCRIPTION CHECK - MORE RELIABLE & USER FRIENDLY"""
+    """IMPROVED SUBSCRIPTION CHECK - FIXED FOR MULTIPLE CHANNELS"""
     try:
         if not channels_db:
             logger.info(f"✅ No channels configured - user {user_id} gets full access")
@@ -3715,13 +3715,19 @@ def check_all_subscriptions(user_id):
         total_active_channels = 0
         invalid_channels_found = []
         
-        # Check each channel with better error handling
-        for channel_id, channel_data in list(channels_db.items()):  # Use list() to allow modification during iteration
+        # First pass: count total active channels
+        for channel_id, channel_data in channels_db.items():
+            if channel_data.get('active', True):
+                total_active_channels += 1
+        
+        logger.info(f"📊 Found {total_active_channels} active channels to check")
+        
+        # Second pass: check each active channel
+        for channel_id, channel_data in list(channels_db.items()):
             if not channel_data.get('active', True):
                 logger.info(f"⏭ Channel {channel_id} is inactive, skipping")
                 continue
             
-            total_active_channels += 1
             channel_name = channel_data.get('name', 'Unknown')
             
             try:
@@ -3755,8 +3761,8 @@ def check_all_subscriptions(user_id):
                             failed_channels.append(channel_name)
                         else:
                             logger.warning(f"⚠️ Unknown status for user {user_id} in {channel_name}: {status}")
-                            # For unknown statuses, give benefit of doubt
-                            success_count += 1
+                            # For unknown statuses, treat as not subscribed
+                            failed_channels.append(channel_name)
                     else:
                         error_desc = result.get('description', 'Unknown error')
                         logger.error(f"❌ API error for channel {channel_name}: {error_desc}")
@@ -3765,8 +3771,8 @@ def check_all_subscriptions(user_id):
                             logger.warning(f"⚠️ Channel {channel_name} seems invalid - marking as inactive")
                             channel_data['active'] = False
                             invalid_channels_found.append(channel_name)
-                            total_active_channels -= 1  # Don't count invalid channels
                         else:
+                            # API error but channel might be valid - treat as not subscribed
                             failed_channels.append(channel_name)
                 elif response.status_code == 400:
                     logger.warning(f"⚠️ HTTP 400 for channel {channel_name} ({channel_id}) - Invalid/inaccessible channel")
@@ -3774,21 +3780,20 @@ def check_all_subscriptions(user_id):
                     channel_data['active'] = False
                     invalid_channels_found.append(channel_name)
                     logger.info(f"📝 Marking channel {channel_name} as inactive due to HTTP 400")
-                    total_active_channels -= 1  # Don't count invalid channels
                 elif response.status_code == 403:
                     logger.warning(f"⚠️ HTTP 403 for channel {channel_name} ({channel_id}) - Bot forbidden")
                     # Channel exists but bot doesn't have access - mark as inactive
                     channel_data['active'] = False
                     invalid_channels_found.append(channel_name)
                     logger.info(f"📝 Marking channel {channel_name} as inactive due to HTTP 403")
-                    total_active_channels -= 1
                 else:
                     logger.error(f"❌ HTTP error {response.status_code} for channel {channel_name}")
+                    # HTTP error - treat as not subscribed
                     failed_channels.append(channel_name)
                     
             except requests.Timeout:
-                logger.error(f"⏰ Timeout checking channel {channel_name} - giving benefit of doubt")
-                success_count += 1  # Timeout = assume subscribed
+                logger.error(f"⏰ Timeout checking channel {channel_name} - treating as not subscribed")
+                failed_channels.append(channel_name)
             except Exception as e:
                 logger.error(f"❌ Exception checking channel {channel_name}: {e}")
                 failed_channels.append(channel_name)
@@ -3801,14 +3806,17 @@ def check_all_subscriptions(user_id):
             except Exception as save_error:
                 logger.error(f"❌ Failed to save invalid channel changes: {save_error}")
         
+        # Recalculate active channels after marking invalid ones
+        current_active_channels = sum(1 for ch_data in channels_db.values() if ch_data.get('active', True))
+        
         # Final decision logic
-        if total_active_channels == 0:
-            logger.info(f"ℹ️ No valid channels found - user {user_id} gets access (all channels were invalid)")
+        if current_active_channels == 0:
+            logger.info(f"ℹ️ No valid channels remain - user {user_id} gets access (all channels were invalid)")
             return True  # All channels invalid = allow access
         
-        logger.info(f"📊 Subscription check result for user {user_id}: {success_count}/{total_active_channels} channels passed")
+        logger.info(f"📊 Subscription check result for user {user_id}: {success_count}/{current_active_channels} channels passed")
         
-        if success_count >= total_active_channels:
+        if success_count >= current_active_channels:
             logger.info(f"✅ User {user_id} passed ALL subscription checks!")
             return True
         else:
@@ -3817,9 +3825,9 @@ def check_all_subscriptions(user_id):
         
     except Exception as e:
         logger.error(f"❌ Critical subscription check error: {e}")
-        # On critical error, allow access but log it
-        logger.warning(f"⚠️ Due to critical error, allowing user {user_id} access")
-        return True  # Changed from False to True - don't block users on system errors
+        # On critical error, don't allow access - require subscription
+        logger.warning(f"⚠️ Due to critical error, requiring subscription for user {user_id}")
+        return False
 
 def send_subscription_message(chat_id, user_id):
     """Ultra fast subscription message with minimal checking"""
