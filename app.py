@@ -2156,6 +2156,10 @@ def handle_channels_menu(chat_id, user_id):
                     {'text': '🔄 Yangilash', 'callback_data': 'channels_menu'}
                 ],
                 [
+                    {'text': '🧹 Nofaol Kanallar', 'callback_data': 'cleanup_channels'},
+                    {'text': '🔍 Barcha Tekshirish', 'callback_data': 'recheck_all_channels'}
+                ],
+                [
                     {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
                 ]
             ]
@@ -2745,6 +2749,9 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             'channel_stats': lambda: handle_channel_statistics(chat_id, user_id),
             'check_channels': lambda: handle_check_channels(chat_id, user_id),
             'test_subscription': lambda: handle_test_subscription(chat_id, user_id),
+            'cleanup_channels': lambda: handle_cleanup_channels(chat_id, user_id),
+            'confirm_cleanup_channels': lambda: handle_confirm_cleanup_channels(chat_id, user_id, callback_id),
+            'recheck_all_channels': lambda: handle_recheck_all_channels(chat_id, user_id, callback_id),
             'accept_suggested_name': lambda: handle_accept_suggested_name(chat_id, user_id, callback_id),
             'cancel_add_channel': lambda: handle_cancel_add_channel(chat_id, user_id, callback_id),
             'skip_additional_info': lambda: handle_skip_additional_info(chat_id, user_id, callback_id),
@@ -2853,8 +2860,9 @@ def handle_add_channel_session(chat_id, message):
                 send_message(chat_id, "❌ Noto'g'ri format! @username yoki -1001234567890 formatda kiriting!")
                 return
             
-            # Test channel access before saving
+            # Test channel access before saving - IMPROVED WITH BETTER ERROR HANDLING
             try:
+                logger.info(f"🔍 Verifying channel access: {channel_id}")
                 url = f"https://api.telegram.org/bot{TOKEN}/getChat"
                 data = {'chat_id': channel_id}
                 response = requests.post(url, data=data, timeout=10)
@@ -2865,24 +2873,72 @@ def handle_add_channel_session(chat_id, message):
                         chat_info = result.get('result', {})
                         actual_channel_name = chat_info.get('title', channel_name)
                         channel_type = chat_info.get('type', 'unknown')
+                        member_count = chat_info.get('members_count', 'N/A')
                         
                         if channel_type not in ['channel', 'supergroup']:
                             send_message(chat_id, f"❌ Bu kanal yoki supergroup emas! Tur: {channel_type}")
                             return
                         
+                        # Check if bot is admin in the channel
+                        try:
+                            admin_url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
+                            bot_info = requests.get(f"https://api.telegram.org/bot{TOKEN}/getMe", timeout=5).json()
+                            bot_id = bot_info.get('result', {}).get('id')
+                            
+                            admin_data = {'chat_id': channel_id, 'user_id': bot_id}
+                            admin_response = requests.post(admin_url, data=admin_data, timeout=5)
+                            
+                            if admin_response.status_code == 200:
+                                admin_result = admin_response.json()
+                                if admin_result.get('ok'):
+                                    bot_status = admin_result.get('result', {}).get('status', 'unknown')
+                                    if bot_status not in ['administrator', 'creator']:
+                                        send_message(chat_id, f"⚠️ DIQQAT: Bot bu kanalda admin emas! Status: {bot_status}\n\nBot to'g'ri ishlashi uchun kanalda admin bo'lishi kerak.")
+                                else:
+                                    logger.warning(f"⚠️ Cannot check bot admin status in {channel_id}")
+                        except Exception as admin_e:
+                            logger.warning(f"⚠️ Admin status check failed: {admin_e}")
+                        
                         # Update with actual info
                         channel_name = actual_channel_name
-                        logger.info(f"✅ Channel verified: {channel_name} ({channel_id})")
+                        logger.info(f"✅ Channel verified: {channel_name} ({channel_id}) - Type: {channel_type}, Members: {member_count}")
                     else:
                         error_desc = result.get('description', 'Unknown error')
-                        send_message(chat_id, f"❌ Kanal tekshirishda xatolik: {error_desc}")
+                        logger.error(f"❌ API error for channel {channel_id}: {error_desc}")
+                        
+                        # Provide specific error messages
+                        if 'chat not found' in error_desc.lower():
+                            send_message(chat_id, f"❌ Kanal topilmadi! {channel_id} mavjud emasligini tekshiring.")
+                        elif 'forbidden' in error_desc.lower():
+                            send_message(chat_id, f"❌ Kanalga kirish taqiqlangan! Bot kanalda a'zo yoki admin bo'lishi kerak.")
+                        elif 'invalid' in error_desc.lower():
+                            send_message(chat_id, f"❌ Noto'g'ri kanal formati! {channel_id} to'g'riligini tekshiring.")
+                        else:
+                            send_message(chat_id, f"❌ Kanal tekshirishda xatolik: {error_desc}")
                         return
-                else:
-                    send_message(chat_id, f"❌ Telegram API xatolik: {response.status_code}")
+                elif response.status_code == 400:
+                    logger.error(f"❌ HTTP 400 for channel {channel_id} - Invalid channel")
+                    send_message(chat_id, f"❌ Noto'g'ri kanal! {channel_id} mavjud emasligini yoki bot kirishga ruxsati borligini tekshiring.")
                     return
+                elif response.status_code == 401:
+                    logger.error(f"❌ HTTP 401 - Bot token invalid")
+                    send_message(chat_id, f"❌ Bot token muammosi. Admin bilan bog'laning.")
+                    return
+                elif response.status_code == 403:
+                    logger.error(f"❌ HTTP 403 for channel {channel_id} - Forbidden")
+                    send_message(chat_id, f"❌ Kanalga kirish taqiqlangan! Bot {channel_id} kanaliga kirisholmaydimi.")
+                    return
+                else:
+                    logger.error(f"❌ HTTP error {response.status_code} for channel {channel_id}")
+                    send_message(chat_id, f"❌ Server xatolik: {response.status_code}")
+                    return
+            except requests.Timeout:
+                logger.error(f"⏰ Timeout verifying channel {channel_id}")
+                send_message(chat_id, "❌ Kanalni tekshirishda vaqt tugadi. Internet aloqasini tekshiring va qayta urinib ko'ring.")
+                return
             except Exception as e:
                 logger.error(f"❌ Channel verification error: {e}")
-                send_message(chat_id, "❌ Kanalni tekshirib bo'lmadi. Internet aloqasini tekshiring.")
+                send_message(chat_id, f"❌ Kanalni tekshirib bo'lmadi: {str(e)}")
                 return
             
             # Ask for channel name confirmation
@@ -3375,6 +3431,98 @@ def handle_channel_post(channel_post):
     except Exception as e:
         logger.error(f"❌ Channel post error: {e}")
 
+def cleanup_invalid_channels():
+    """Clean up invalid channels from database"""
+    try:
+        if not channels_db:
+            logger.info("📺 No channels to clean up")
+            return 0
+        
+        invalid_channels = []
+        
+        for channel_id, channel_data in list(channels_db.items()):
+            if not channel_data.get('active', True):
+                invalid_channels.append((channel_id, channel_data.get('name', 'Unknown')))
+        
+        if invalid_channels:
+            for channel_id, channel_name in invalid_channels:
+                logger.info(f"🗑 Removing invalid channel: {channel_name} ({channel_id})")
+                del channels_db[channel_id]
+            
+            # Save changes
+            auto_save_data()
+            logger.info(f"✅ Cleaned up {len(invalid_channels)} invalid channels")
+            return len(invalid_channels)
+        else:
+            logger.info("✅ No invalid channels found")
+            return 0
+            
+    except Exception as e:
+        logger.error(f"❌ Cleanup invalid channels error: {e}")
+        return 0
+
+def handle_cleanup_channels(chat_id, user_id):
+    """Handle cleanup invalid channels command"""
+    try:
+        if user_id != ADMIN_ID:
+            send_message(chat_id, "❌ Faqat admin bu buyruqni ishlatishi mumkin!")
+            return
+        
+        # Find invalid channels
+        invalid_count = 0
+        invalid_list = []
+        
+        for channel_id, channel_data in channels_db.items():
+            if not channel_data.get('active', True):
+                invalid_count += 1
+                invalid_list.append(f"• {channel_data.get('name', 'Unknown')} ({channel_id})")
+        
+        if invalid_count == 0:
+            text = """✅ <b>KANAL TOZALASH</b>
+
+🎉 <b>Barcha kanallar faol!</b>
+
+📊 <b>Holat:</b>
+• Jami kanallar: <code>{}</code> ta
+• Faol kanallar: <code>{}</code> ta
+• Nofaol kanallar: <code>0</code> ta
+
+💡 <b>Hech qanday tozalash kerak emas.</b>""".format(len(channels_db), len(channels_db))
+        else:
+            invalid_channels_text = '\n'.join(invalid_list[:10])  # Show max 10
+            if len(invalid_list) > 10:
+                invalid_channels_text += f"\n... va yana {len(invalid_list) - 10} ta"
+            
+            text = f"""🧹 <b>NOFAOL KANALLAR TOPILDI</b>
+
+⚠️ <b>Quyidagi kanallar nofaol:</b>
+{invalid_channels_text}
+
+📊 <b>Statistika:</b>
+• Jami kanallar: <code>{len(channels_db)}</code> ta
+• Faol kanallar: <code>{len(channels_db) - invalid_count}</code> ta
+• Nofaol kanallar: <code>{invalid_count}</code> ta
+
+💡 <b>Nofaol kanallarni o'chirish tavsiya etiladi.</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': f'🗑 {invalid_count} ta nofaol kanalni o\'chirish', 'callback_data': 'confirm_cleanup_channels'} if invalid_count > 0 else {'text': '✅ Hammasi faol', 'callback_data': 'channels_admin'},
+                ],
+                [
+                    {'text': '🔄 Kanallarni qayta tekshirish', 'callback_data': 'recheck_all_channels'},
+                    {'text': '📺 Kanallar menu', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        
+    except Exception as e:
+        logger.error(f"❌ Cleanup channels error: {e}")
+        send_message(chat_id, "❌ Kanallarni tozalashda xatolik!")
+
 def check_all_subscriptions(user_id):
     """IMPROVED SUBSCRIPTION CHECK - MORE RELIABLE & USER FRIENDLY"""
     try:
@@ -3440,8 +3588,17 @@ def check_all_subscriptions(user_id):
                         else:
                             failed_channels.append(channel_name)
                 elif response.status_code == 400:
-                    logger.warning(f"⚠️ HTTP 400 for channel {channel_name} - possibly invalid channel")
+                    logger.warning(f"⚠️ HTTP 400 for channel {channel_name} ({channel_id}) - Invalid/inaccessible channel")
+                    # Mark channel as inactive to prevent future checks
+                    channel_data['active'] = False
+                    logger.info(f"📝 Marking channel {channel_name} as inactive due to HTTP 400")
                     total_active_channels -= 1  # Don't count invalid channels
+                elif response.status_code == 403:
+                    logger.warning(f"⚠️ HTTP 403 for channel {channel_name} ({channel_id}) - Bot forbidden")
+                    # Channel exists but bot doesn't have access
+                    channel_data['active'] = False
+                    logger.info(f"📝 Marking channel {channel_name} as inactive due to HTTP 403")
+                    total_active_channels -= 1
                 else:
                     logger.error(f"❌ HTTP error {response.status_code} for channel {channel_name}")
                     failed_channels.append(channel_name)
@@ -3943,6 +4100,151 @@ def handle_check_channels(chat_id, user_id):
     except Exception as e:
         logger.error(f"❌ Check channels error: {e}")
         send_message(chat_id, "❌ Kanallarni tekshirishda xatolik!")
+
+def handle_confirm_cleanup_channels(chat_id, user_id, callback_id):
+    """Confirm and execute channel cleanup"""
+    try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Faqat admin!", True)
+            return
+        
+        cleaned_count = cleanup_invalid_channels()
+        
+        if cleaned_count > 0:
+            text = f"""✅ <b>KANALLAR TOZALANDI!</b>
+
+🗑 <b>O'chirildi:</b> <code>{cleaned_count}</code> ta nofaol kanal
+📊 <b>Qoldi:</b> <code>{len(channels_db)}</code> ta faol kanal
+
+💾 <b>O'zgarishlar saqlandi:</b>
+• JSON fayl yangilandi
+• MongoDB yangilandi
+• Auto-backup yaratildi
+
+🎯 <b>Endi faqat faol kanallar tekshiriladi!</b>"""
+        else:
+            text = """ℹ️ <b>TOZALASH NATIJASI</b>
+
+✨ <b>Nofaol kanallar topilmadi!</b>
+
+📊 <b>Barcha kanallar faol:</b> <code>{}</code> ta
+
+💡 <b>Hech qanday o'zgartirish kerak bo'lmadi.</b>""".format(len(channels_db))
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '📺 Kanallar ro\'yxati', 'callback_data': 'list_channels'},
+                    {'text': '➕ Yangi kanal qo\'shish', 'callback_data': 'add_channel'}
+                ],
+                [
+                    {'text': '🔙 Kanallar menu', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"✅ {cleaned_count} ta kanal tozalandi!")
+        
+    except Exception as e:
+        logger.error(f"❌ Confirm cleanup error: {e}")
+        answer_callback_query(callback_id, "❌ Tozalashda xatolik!", True)
+
+def handle_recheck_all_channels(chat_id, user_id, callback_id):
+    """Recheck all channels status"""
+    try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Faqat admin!", True)
+            return
+        
+        if not channels_db:
+            text = """ℹ️ <b>KANALLAR TEKSHIRUVI</b>
+
+📭 <b>Hech qanday kanal yo'q!</b>
+
+💡 <b>Avval kanal qo'shing:</b>"""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '➕ Kanal qo\'shish', 'callback_data': 'add_channel'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
+            answer_callback_query(callback_id, "Kanallar yo'q!")
+            return
+        
+        # Check each channel
+        valid_channels = 0
+        invalid_channels = 0
+        channel_results = []
+        
+        for channel_id, channel_data in channels_db.items():
+            channel_name = channel_data.get('name', 'Unknown')
+            
+            try:
+                url = f"https://api.telegram.org/bot{TOKEN}/getChat"
+                data = {'chat_id': channel_id}
+                response = requests.post(url, data=data, timeout=5)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('ok'):
+                        channel_data['active'] = True
+                        valid_channels += 1
+                        channel_results.append(f"✅ {channel_name}")
+                    else:
+                        channel_data['active'] = False
+                        invalid_channels += 1
+                        channel_results.append(f"❌ {channel_name}")
+                else:
+                    channel_data['active'] = False
+                    invalid_channels += 1
+                    channel_results.append(f"❌ {channel_name} (HTTP {response.status_code})")
+                    
+            except Exception as e:
+                channel_data['active'] = False
+                invalid_channels += 1
+                channel_results.append(f"❌ {channel_name} (Error)")
+        
+        # Save updates
+        auto_save_data()
+        
+        results_text = '\n'.join(channel_results[:10])
+        if len(channel_results) > 10:
+            results_text += f"\n... va yana {len(channel_results) - 10} ta"
+        
+        text = f"""🔍 <b>KANALLAR TEKSHIRUVI NATIJASI</b>
+
+📊 <b>Natija:</b>
+• ✅ Faol: <code>{valid_channels}</code> ta
+• ❌ Nofaol: <code>{invalid_channels}</code> ta
+• 📋 Jami: <code>{len(channels_db)}</code> ta
+
+📋 <b>Batafsil:</b>
+{results_text}
+
+💾 <b>Natijalar saqlandi!</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': f'🗑 {invalid_channels} ta nofaolni o\'chirish', 'callback_data': 'confirm_cleanup_channels'} if invalid_channels > 0 else {'text': '✅ Hammasi faol', 'callback_data': 'channels_admin'}
+                ],
+                [
+                    {'text': '📺 Kanallar menu', 'callback_data': 'channels_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"✅ Tekshirildi: {valid_channels} faol, {invalid_channels} nofaol")
+        
+    except Exception as e:
+        logger.error(f"❌ Recheck channels error: {e}")
+        answer_callback_query(callback_id, "❌ Tekshirishda xatolik!", True)
 
 def handle_test_subscription(chat_id, user_id):
     """Test subscription system"""
