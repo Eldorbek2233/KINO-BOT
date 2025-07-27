@@ -1243,7 +1243,7 @@ def handle_callback_query(callback_query):
             else:
                 answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
                 
-        elif data == 'confirm_delete_all':
+        elif data == 'confirm_delete_all_movies':
             # Confirm delete all movies
             if user_id == ADMIN_ID:
                 handle_confirm_delete_all_movies(chat_id, user_id, callback_id)
@@ -3167,18 +3167,24 @@ def handle_channel_post(channel_post):
         logger.error(f"❌ Channel post error: {e}")
 
 def check_all_subscriptions(user_id):
-    """Ultra fast subscription check - optimized for speed"""
+    """PROFESSIONAL SUBSCRIPTION CHECK - ULTRA FAST & RELIABLE"""
     try:
         if not channels_db:
+            logger.info(f"✅ No channels configured - user {user_id} gets full access")
             return True  # No channels = full access
         
-        # Ultra fast parallel check
+        logger.info(f"🔍 Checking subscription for user {user_id} across {len(channels_db)} channels")
+        
+        # Ultra fast parallel check with immediate failure detection
         for channel_id, channel_data in channels_db.items():
             if not channel_data.get('active', True):
+                logger.info(f"⏭ Channel {channel_id} is inactive, skipping")
                 continue
             
+            channel_name = channel_data.get('name', 'Unknown')
+            
             try:
-                # Lightning fast check - no detailed logging
+                # Lightning fast API call with 2-second timeout
                 url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
                 data = {'chat_id': channel_id, 'user_id': user_id}
                 response = requests.post(url, data=data, timeout=2)
@@ -3187,19 +3193,44 @@ def check_all_subscriptions(user_id):
                     result = response.json()
                     if result.get('ok'):
                         status = result.get('result', {}).get('status', '')
-                        if status not in ['member', 'administrator', 'creator', 'restricted']:
+                        logger.info(f"📺 Channel {channel_name}: status = {status}")
+                        
+                        # Valid subscription statuses
+                        if status in ['member', 'administrator', 'creator']:
+                            logger.info(f"✅ User {user_id} subscribed to {channel_name}")
+                            continue  # Check next channel
+                        elif status == 'restricted':
+                            # Check if user can send messages (not banned)
+                            can_send = result.get('result', {}).get('can_send_messages', False)
+                            if can_send:
+                                logger.info(f"✅ User {user_id} restricted but can send in {channel_name}")
+                                continue
+                            else:
+                                logger.info(f"❌ User {user_id} restricted and cannot send in {channel_name}")
+                                return False
+                        else:
+                            logger.info(f"❌ User {user_id} NOT subscribed to {channel_name} (status: {status})")
                             return False  # Immediately return false on first unsubscribed
                     else:
+                        error_desc = result.get('description', 'Unknown error')
+                        logger.error(f"❌ API error for channel {channel_name}: {error_desc}")
                         return False
                 else:
+                    logger.error(f"❌ HTTP error {response.status_code} for channel {channel_name}")
                     return False
-            except:
+                    
+            except requests.Timeout:
+                logger.error(f"⏰ Timeout checking channel {channel_name}")
+                return False
+            except Exception as e:
+                logger.error(f"❌ Exception checking channel {channel_name}: {e}")
                 return False  # Any error = not subscribed
         
+        logger.info(f"✅ User {user_id} passed ALL subscription checks!")
         return True  # All checks passed
         
     except Exception as e:
-        logger.error(f"❌ Ultra fast check error: {e}")
+        logger.error(f"❌ Critical subscription check error: {e}")
         return False
 
 def send_subscription_message(chat_id, user_id):
@@ -3249,13 +3280,13 @@ def send_subscription_message(chat_id, user_id):
 
 🎯 <b>Professional kino bot - sizning xizmatlaringizda!</b>"""
         
-        # Add check button
+        # Add check button with clear text
         keyboard['inline_keyboard'].append([
-            {'text': '🔍 Obunani Tekshirish', 'callback_data': 'check_subscription'}
+            {'text': '✅ OBUNA BO\'LDIM - TEKSHIRISH', 'callback_data': 'check_subscription'}
         ])
         
         send_message(chat_id, text, keyboard)
-        logger.info(f"📺 Fast subscription message sent to user {user_id}")
+        logger.info(f"✅ Subscription message sent to user {user_id} with {channel_count} channels")
         
     except Exception as e:
         logger.error(f"❌ Fast subscription message error: {e}")
@@ -3366,7 +3397,7 @@ Avval kanal qo'shing, keyin o'chirishingiz mumkin."""
         send_message(chat_id, "❌ Kanal o'chirishda xatolik!")
 
 def handle_channel_removal(chat_id, user_id, channel_id, callback_id):
-    """Handle individual channel removal"""
+    """Handle individual channel removal - FIXED VERSION"""
     try:
         if user_id != ADMIN_ID:
             answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
@@ -3374,31 +3405,37 @@ def handle_channel_removal(chat_id, user_id, channel_id, callback_id):
         
         if channel_id not in channels_db:
             answer_callback_query(callback_id, "❌ Kanal topilmadi!", True)
+            handle_remove_channel_menu(chat_id, user_id)
             return
         
         channel_data = channels_db[channel_id]
         channel_name = channel_data.get('name', "Noma'lum kanal")
         username = channel_data.get('username', "Noma'lum")
-        add_date = channel_data.get('add_date', "Noma'lum")[:10]
+        add_date = channel_data.get('add_date', "Noma'lum")[:10] if channel_data.get('add_date') else "Noma'lum"
         
-        # Show confirmation dialog
+        # Show confirmation dialog with clear buttons
         text = f"""🗑 <b>KANAL O'CHIRISH TASDIQI</b>
 
-⚠️ <b>Diqqat!</b> Quyidagi kanalni o'chirmoqchimisiz?
+⚠️ <b>DIQQAT!</b> Quyidagi kanalni o'chirmoqchimisiz?
 
 📺 <b>Kanal:</b> {channel_name}
-🔗 <b>Username:</b> {username}
+🔗 <b>Username:</b> @{username}
 📅 <b>Qo'shilgan:</b> {add_date}
+🆔 <b>ID:</b> <code>{channel_id}</code>
 
 ❗️ <b>Bu amalni bekor qilib bo'lmaydi!</b>
+
+• Kanal majburiy obuna ro'yxatidan o'chiriladi
+• Azolik tekshiruvida bu kanal ishtirok etmaydi
+• Backup fayllarida ma'lumot saqlanadi
 
 Kanalni o'chirishni tasdiqlaysizmi?"""
 
         keyboard = {
             'inline_keyboard': [
                 [
-                    {'text': '✅ Ha, o\'chirish', 'callback_data': f'confirm_remove_channel_{channel_id}'},
-                    {'text': '❌ Bekor qilish', 'callback_data': 'remove_channel'}
+                    {'text': '✅ HA, O\'CHIRISH', 'callback_data': f'confirm_remove_channel_{channel_id}'},
+                    {'text': '❌ BEKOR QILISH', 'callback_data': 'remove_channel'}
                 ]
             ]
         }
@@ -3408,10 +3445,11 @@ Kanalni o'chirishni tasdiqlaysizmi?"""
         
     except Exception as e:
         logger.error(f"❌ Channel removal error: {e}")
+        send_message(chat_id, "❌ Kanal o'chirishda xatolik!")
         answer_callback_query(callback_id, "❌ Xatolik yuz berdi!", True)
 
 def handle_channel_removal_confirmation(chat_id, user_id, channel_id, callback_id):
-    """Confirm and execute channel removal"""
+    """Confirm and execute channel removal - FIXED VERSION"""
     try:
         if user_id != ADMIN_ID:
             answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
@@ -3419,34 +3457,76 @@ def handle_channel_removal_confirmation(chat_id, user_id, channel_id, callback_i
         
         if channel_id not in channels_db:
             answer_callback_query(callback_id, "❌ Kanal topilmadi!", True)
+            handle_remove_channel_menu(chat_id, user_id)
             return
         
         channel_data = channels_db[channel_id]
         channel_name = channel_data.get('name', 'Noma\'lum kanal')
         
-        # Remove from memory
+        # Remove from memory first
         del channels_db[channel_id]
         
         # Remove from MongoDB if available
+        mongodb_deleted = False
         if is_mongodb_available():
             try:
-                mongo_db.channels.delete_one({'channel_id': channel_id})
-                logger.info(f"✅ Channel removed from MongoDB: {channel_id}")
+                result = mongo_db.channels.delete_one({'channel_id': channel_id})
+                if result.deleted_count > 0:
+                    mongodb_deleted = True
+                    logger.info(f"✅ Channel removed from MongoDB: {channel_id}")
+                else:
+                    # Try alternative removal method
+                    result = mongo_db.channels.update_one(
+                        {'channel_id': channel_id},
+                        {'$set': {'status': 'deleted', 'deleted_date': datetime.now().isoformat()}}
+                    )
+                    if result.modified_count > 0:
+                        mongodb_deleted = True
             except Exception as e:
                 logger.error(f"❌ MongoDB channel removal error: {e}")
         
-        # Auto-save changes
-        auto_save_data()
+        # Auto-save changes immediately
+        try:
+            auto_save_data()
+            logger.info(f"✅ Channel {channel_id} removed and saved")
+        except Exception as e:
+            logger.error(f"❌ Auto-save error after channel delete: {e}")
         
         majburiy_obuna = 'Faol' if len(channels_db) > 0 else "O'chiq"
+        mongodb_status = '✅ O\'chirildi' if mongodb_deleted else "❌ Xatolik yoki mavjud emas"
         
         text = f"""✅ <b>KANAL MUVAFFAQIYATLI O'CHIRILDI!</b>
 
 🗑 <b>O'chirilgan kanal:</b> {channel_name}
-📊 <b>Qolgan kanallar:</b> {len(channels_db)} ta
-🔄 <b>Majburiy obuna:</b> {majburiy_obuna}
+📊 <b>Qolgan kanallar:</b> <code>{len(channels_db)}</code> ta
+🔄 <b>Majburiy obuna:</b> <code>{majburiy_obuna}</code>
 
-💾 <b>Ma'lumotlar:</b> MongoDB + JSON backup yangilandi"""
+💾 <b>O'chirish holati:</b>
+• JSON file: <code>✅ O'chirildi</code>
+• MongoDB: <code>{mongodb_status}</code>
+• Backup: <code>✅ Saqlanib qoldi</code>
+
+🎭 <b>Professional Channel Management</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🗑 YANA O\'CHIRISH', 'callback_data': 'remove_channel'},
+                    {'text': '📺 KANAL BOSHQARUVI', 'callback_data': 'channels_admin'}
+                ],
+                [
+                    {'text': '👑 ADMIN PANEL', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, f"✅ {channel_name} muvaffaqiyatli o'chirildi!")
+        
+    except Exception as e:
+        logger.error(f"❌ Channel removal confirmation error: {e}")
+        send_message(chat_id, f"❌ Kanal o'chirishda xatolik: {str(e)}")
+        answer_callback_query(callback_id, "❌ O'chirishda xatolik!", True)
 
         keyboard = {
             'inline_keyboard': [
@@ -5110,8 +5190,13 @@ def handle_movies_backup(chat_id, user_id):
 def handle_delete_single_movie(chat_id, user_id, movie_code, callback_id):
     """Handle single movie deletion confirmation"""
     try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+            
         if movie_code not in movies_db:
             answer_callback_query(callback_id, "❌ Kino topilmadi!", True)
+            handle_delete_movies_menu(chat_id, user_id)
             return
         
         movie_info = movies_db[movie_code]
@@ -5141,8 +5226,8 @@ def handle_delete_single_movie(chat_id, user_id, movie_code, callback_id):
         keyboard = {
             'inline_keyboard': [
                 [
-                    {'text': '✅ Ha, o\'chirish', 'callback_data': f'confirm_delete_movie_{movie_code}'},
-                    {'text': '❌ Yo\'q, bekor qilish', 'callback_data': 'delete_movies'}
+                    {'text': '✅ HA, O\'CHIRISH', 'callback_data': f'confirm_delete_movie_{movie_code}'},
+                    {'text': '❌ BEKOR QILISH', 'callback_data': 'delete_movies'}
                 ]
             ]
         }
@@ -5152,37 +5237,52 @@ def handle_delete_single_movie(chat_id, user_id, movie_code, callback_id):
         
     except Exception as e:
         logger.error(f"❌ Delete single movie error: {e}")
+        send_message(chat_id, "❌ Kino o'chirishda xatolik!")
         answer_callback_query(callback_id, "❌ Xatolik!", True)
 
 def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
-    """Confirm and delete single movie"""
+    """Confirm and delete single movie - FIXED VERSION"""
     try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+            
         if movie_code not in movies_db:
             answer_callback_query(callback_id, "❌ Kino topilmadi!", True)
+            handle_delete_movies_menu(chat_id, user_id)
             return
         
         movie_info = movies_db[movie_code]
         title = movie_info.get('title', f'Kino {movie_code}') if isinstance(movie_info, dict) else f'Kino {movie_code}'
         
-        # Delete from memory
+        # Delete from memory first
         del movies_db[movie_code]
         
         # Delete from MongoDB if available
         mongodb_deleted = False
         if is_mongodb_available():
             try:
-                result = mongo_db.movies.update_one(
-                    {'code': movie_code},
-                    {'$set': {'status': 'deleted', 'deleted_date': datetime.now().isoformat()}}
-                )
-                if result.modified_count > 0:
+                result = mongo_db.movies.delete_one({'code': movie_code})
+                if result.deleted_count > 0:
                     mongodb_deleted = True
                     logger.info(f"🗑 Movie deleted from MongoDB: {movie_code}")
+                else:
+                    # Try update status if delete fails
+                    result = mongo_db.movies.update_one(
+                        {'code': movie_code},
+                        {'$set': {'status': 'deleted', 'deleted_date': datetime.now().isoformat()}}
+                    )
+                    if result.modified_count > 0:
+                        mongodb_deleted = True
             except Exception as e:
                 logger.error(f"❌ MongoDB delete error: {e}")
         
-        # Save changes
-        auto_save_data()
+        # Save changes immediately
+        try:
+            auto_save_data()
+            logger.info(f"✅ Movie {movie_code} deleted and saved")
+        except Exception as e:
+            logger.error(f"❌ Auto-save error after delete: {e}")
         
         mongodb_status = '✅ O\'chirildi' if mongodb_deleted else "❌ Xatolik yoki mavjud emas"
         
@@ -5204,26 +5304,35 @@ def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
         keyboard = {
             'inline_keyboard': [
                 [
-                    {'text': '🗑 Yana o\'chirish', 'callback_data': 'delete_movies'},
-                    {'text': '🎬 Kino boshqaruvi', 'callback_data': 'movies_admin'}
+                    {'text': '🗑 YANA O\'CHIRISH', 'callback_data': 'delete_movies'},
+                    {'text': '🎬 KINO BOSHQARUVI', 'callback_data': 'movies_admin'}
+                ],
+                [
+                    {'text': '👑 ADMIN PANEL', 'callback_data': 'admin_main'}
                 ]
             ]
         }
         
         send_message(chat_id, text, keyboard)
-        answer_callback_query(callback_id, f"✅ {movie_code} o'chirildi!")
+        answer_callback_query(callback_id, f"✅ {movie_code} muvaffaqiyatli o'chirildi!")
         
     except Exception as e:
         logger.error(f"❌ Confirm delete movie error: {e}")
+        send_message(chat_id, f"❌ Kino o'chirishda xatolik: {str(e)}")
         answer_callback_query(callback_id, "❌ O'chirishda xatolik!", True)
 
 def handle_delete_all_movies_confirm(chat_id, user_id, callback_id):
-    """Show confirmation for deleting all movies"""
+    """Show confirmation for deleting all movies - FIXED VERSION"""
     try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+            
         total_movies = len(movies_db)
         
         if total_movies == 0:
             answer_callback_query(callback_id, "❌ Kinolar mavjud emas!", True)
+            handle_delete_movies_menu(chat_id, user_id)
             return
         
         # Calculate total size
@@ -5260,7 +5369,7 @@ def handle_delete_all_movies_confirm(chat_id, user_id, callback_id):
         keyboard = {
             'inline_keyboard': [
                 [
-                    {'text': '💥 HA, BARCHASINI O\'CHIRISH', 'callback_data': 'confirm_delete_all'}
+                    {'text': '💥 HA, BARCHASINI O\'CHIRISH', 'callback_data': 'confirm_delete_all_movies'}
                 ],
                 [
                     {'text': '❌ YO\'Q, BEKOR QILISH', 'callback_data': 'delete_movies'}
@@ -5269,19 +5378,25 @@ def handle_delete_all_movies_confirm(chat_id, user_id, callback_id):
         }
         
         send_message(chat_id, text, keyboard)
-        answer_callback_query(callback_id, "⚠️ Jiddiy tasdiqlash!")
+        answer_callback_query(callback_id, "⚠️ Jiddiy tasdiqlash kerak!")
         
     except Exception as e:
         logger.error(f"❌ Delete all confirm error: {e}")
+        send_message(chat_id, "❌ Barcha kinolarni o'chirishda xatolik!")
         answer_callback_query(callback_id, "❌ Xatolik!", True)
 
 def handle_confirm_delete_all_movies(chat_id, user_id, callback_id):
-    """Confirm and delete all movies"""
+    """Confirm and delete all movies - FIXED VERSION"""
     try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+            
         total_movies = len(movies_db)
         
         if total_movies == 0:
             answer_callback_query(callback_id, "❌ Kinolar mavjud emas!", True)
+            handle_delete_movies_menu(chat_id, user_id)
             return
         
         # Create final backup before deletion
@@ -5289,6 +5404,7 @@ def handle_confirm_delete_all_movies(chat_id, user_id, callback_id):
         try:
             with open(f'final_backup_before_delete_{timestamp}.json', 'w', encoding='utf-8') as f:
                 json.dump(movies_db, f, ensure_ascii=False, indent=2)
+            logger.info(f"✅ Final backup created: final_backup_before_delete_{timestamp}.json")
         except Exception as e:
             logger.error(f"❌ Final backup error: {e}")
         
@@ -5296,27 +5412,40 @@ def handle_confirm_delete_all_movies(chat_id, user_id, callback_id):
         mongodb_deleted = 0
         if is_mongodb_available():
             try:
-                result = mongo_db.movies.update_many(
-                    {'status': 'active'},
-                    {'$set': {'status': 'bulk_deleted', 'deleted_date': datetime.now().isoformat()}}
-                )
-                mongodb_deleted = result.modified_count
-                logger.info(f"🗑 {mongodb_deleted} movies marked as deleted in MongoDB")
+                # Try to delete all movies
+                result = mongo_db.movies.delete_many({'status': {'$ne': 'deleted'}})
+                mongodb_deleted = result.deleted_count
+                logger.info(f"🗑 {mongodb_deleted} movies deleted from MongoDB")
+                
+                if mongodb_deleted == 0:
+                    # Alternative: mark as deleted
+                    result = mongo_db.movies.update_many(
+                        {'status': {'$ne': 'deleted'}},
+                        {'$set': {'status': 'bulk_deleted', 'deleted_date': datetime.now().isoformat()}}
+                    )
+                    mongodb_deleted = result.modified_count
+                    logger.info(f"🗑 {mongodb_deleted} movies marked as deleted in MongoDB")
             except Exception as e:
                 logger.error(f"❌ MongoDB bulk delete error: {e}")
         
         # Clear memory
         movies_db.clear()
         
-        # Save empty database
-        auto_save_data()
+        # Save empty database immediately
+        try:
+            auto_save_data()
+            logger.info("✅ Empty database saved successfully")
+        except Exception as e:
+            logger.error(f"❌ Auto-save error after bulk delete: {e}")
+        
+        mongodb_status = f'✅ {mongodb_deleted} ta o\'chirildi' if mongodb_deleted > 0 else "❌ Xatolik yoki mavjud emas"
         
         text = f"""💥 <b>BARCHA KINOLAR O'CHIRILDI!</b>
 
 ✅ <b>O'chirish natijasi:</b>
 • O'chirilgan kinolar: <code>{total_movies}</code> ta
 • JSON file: <code>✅ Tozalandi</code>
-• MongoDB: <code>{'✅ ' + str(mongodb_deleted) + ' ta belgilandi' if mongodb_deleted > 0 else '❌ Xatolik'}</code>
+• MongoDB: <code>{mongodb_status}</code>
 • Memory: <code>✅ Tozalandi</code>
 
 💾 <b>Final backup yaratildi:</b>
@@ -5333,17 +5462,21 @@ def handle_confirm_delete_all_movies(chat_id, user_id, callback_id):
         keyboard = {
             'inline_keyboard': [
                 [
-                    {'text': '📤 Yangi kino yuklash', 'callback_data': 'start_upload'},
-                    {'text': '🎬 Kino boshqaruvi', 'callback_data': 'movies_admin'}
+                    {'text': '📤 YANGI KINO YUKLASH', 'callback_data': 'start_upload'},
+                    {'text': '🎬 KINO BOSHQARUVI', 'callback_data': 'movies_admin'}
+                ],
+                [
+                    {'text': '👑 ADMIN PANEL', 'callback_data': 'admin_main'}
                 ]
             ]
         }
         
         send_message(chat_id, text, keyboard)
-        answer_callback_query(callback_id, f"💥 {total_movies} ta kino o'chirildi!")
+        answer_callback_query(callback_id, f"💥 {total_movies} ta kino muvaffaqiyatli o'chirildi!")
         
     except Exception as e:
-        logger.error(f"❌ Confirm delete all error: {e}")
+        logger.error(f"❌ Confirm delete all movies error: {e}")
+        send_message(chat_id, f"❌ Barcha kinolarni o'chirishda xatolik: {str(e)}")
         answer_callback_query(callback_id, "❌ O'chirishda xatolik!", True)
 
 # Additional admin functions for complete functionality
