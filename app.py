@@ -79,19 +79,19 @@ def is_mongodb_available():
 # Global Data Storage
 users_db = {}
 movies_db = {}
-channels_db = {}  # TEMPORARILY DISABLED - No mandatory subscription channels
+channels_db = {}  # Majburiy azolik kanallari - FAOL
 upload_sessions = {}
 broadcast_sessions = {}
 
-# FORCE DISABLE SUBSCRIPTION SYSTEM - TEMPORARY FIX
-def force_disable_channels():
-    """Temporarily disable all channels to fix subscription issue"""
+# SUBSCRIPTION SYSTEM IS NOW ACTIVE
+def initialize_subscription_system():
+    """Initialize subscription system with proper channel management"""
     global channels_db
-    channels_db.clear()  # Always keep empty
-    logger.info("🔧 FORCED CHANNEL DISABLE: All channels cleared for immediate user access")
+    logger.info("🔧 SUBSCRIPTION SYSTEM ACTIVATED: Channels will be loaded from database")
+    # Channels will be loaded from database in load_data function
 
-# Call force disable on module import
-force_disable_channels()
+# Call initialization on module import  
+initialize_subscription_system()
 
 # Environment-based data persistence
 def save_to_environment():
@@ -441,10 +441,22 @@ def load_data():
                     }
                 logger.info(f"✅ Loaded {len(movies_db)} movies from MongoDB")
                 
-                # DISABLED: Load channels from MongoDB - SUBSCRIPTION SYSTEM TEMPORARILY OFF
-                # This prevents loading invalid channels that cause subscription failures
-                logger.info("🔧 CHANNELS LOADING DISABLED: Subscription system is temporarily off")
-                channels_db.clear()  # Ensure channels remain empty
+                # Load channels from MongoDB - SUBSCRIPTION SYSTEM ACTIVE
+                mongodb_channels = mongo_db.channels.find({'active': True})
+                channels_loaded = 0
+                for channel in mongodb_channels:
+                    channel_id = str(channel['channel_id'])
+                    channels_db[channel_id] = {
+                        'channel_id': channel_id,
+                        'name': channel.get('name', ''),
+                        'username': channel.get('username', ''),
+                        'url': channel.get('url', ''),
+                        'add_date': channel.get('add_date', datetime.now().isoformat()),
+                        'active': channel.get('active', True),
+                        'added_by': channel.get('added_by', ADMIN_ID)
+                    }
+                    channels_loaded += 1
+                logger.info(f"✅ Loaded {channels_loaded} active channels from MongoDB")
                 
             except Exception as e:
                 logger.error(f"❌ MongoDB loading error: {e}")
@@ -466,24 +478,24 @@ def load_data():
                 movies_db.update(file_movies)
                 logger.info(f"✅ Loaded {len(file_movies)} movies from file (backup)")
             
-        # DISABLED: Load channels from file - SUBSCRIPTION SYSTEM TEMPORARILY OFF
-        # This prevents loading invalid channels from backup files
-        if os.path.exists('channels.json'):
-            logger.info("🔧 CHANNELS FILE LOADING DISABLED: Subscription system is temporarily off")
-            channels_db.clear()  # Ensure channels remain empty
+        # Load channels from file if MongoDB didn't load any
+        if os.path.exists('channels.json') and len(channels_db) == 0:
+            with open('channels.json', 'r', encoding='utf-8') as f:
+                file_channels = json.load(f)
+                # Only load active channels
+                for ch_id, ch_data in file_channels.items():
+                    if ch_data.get('active', True):
+                        channels_db[ch_id] = ch_data
+                logger.info(f"✅ Loaded {len(channels_db)} active channels from file (backup)")
             
-        # Final cleanup to ensure no channels are loaded
-        force_disable_channels()
-            
-        logger.info(f"📊 Total loaded: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels (CHANNELS DISABLED)")
+        logger.info(f"📊 Total loaded: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
         return True
             
     except Exception as e:
         logger.error(f"❌ Data loading error: {e}")
         users_db = {}
         movies_db = {}
-        channels_db = {} 
-        force_disable_channels()  # Ensure channels remain disabled even on error
+        channels_db = {}
 
 # Telegram API Functions
 def send_message(chat_id, text, keyboard=None):
@@ -1002,10 +1014,107 @@ def handle_message(message):
             except Exception as cleanup_error:
                 logger.error(f"❌ Cleanup command error: {cleanup_error}")
                 send_message(chat_id, f"❌ Cleanup error: {str(cleanup_error)}")
+        elif text == '/addchannel' and user_id == ADMIN_ID:
+            # Quick add channel command for admin
+            text = """➕ <b>YANGI KANAL QO'SHISH</b>
+
+📝 <b>Kanal qo'shish uchun quyidagi formatda yuboring:</b>
+
+<code>/addchannel @channel_username Kanal_Nomi</code>
+
+💡 <b>Misol:</b>
+<code>/addchannel @movies_uz Kinolar Kanali</code>
+<code>/addchannel -1001234567890 Yangi Kanal</code>
+
+🎯 <b>Yoki admin paneldan "Kanallar" bo'limini ishlating!</b>"""
+            
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '📺 Kanallar Boshqaruvi', 'callback_data': 'channels_admin'},
+                        {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
         elif 'video' in message and user_id == ADMIN_ID:
             handle_video_upload(chat_id, message)
         elif 'photo' in message and user_id == ADMIN_ID:
             handle_photo_upload(chat_id, message)
+        elif text and text.startswith('/addchannel ') and user_id == ADMIN_ID:
+            # Process quick add channel command
+            try:
+                parts = text.split(' ', 2)  # /addchannel @channel_name Channel Name
+                if len(parts) >= 3:
+                    channel_input = parts[1].strip()
+                    channel_name = parts[2].strip()
+                    
+                    # Process channel input
+                    if channel_input.startswith('@'):
+                        channel_id = channel_input  # Use username as ID for now
+                        username = channel_input
+                    elif channel_input.startswith('-'):
+                        channel_id = channel_input
+                        username = channel_input  # For private channels
+                    else:
+                        channel_id = f"@{channel_input}"
+                        username = f"@{channel_input}"
+                    
+                    # Create channel data
+                    channel_data = {
+                        'channel_id': channel_id,
+                        'name': channel_name,
+                        'username': username,
+                        'url': f"https://t.me/{username[1:]}" if username.startswith('@') else '#',
+                        'add_date': datetime.now().isoformat(),
+                        'active': True,
+                        'added_by': user_id
+                    }
+                    
+                    # Save to memory
+                    channels_db[channel_id] = channel_data
+                    
+                    # Save to MongoDB if available
+                    if is_mongodb_available():
+                        save_channel_to_mongodb(channel_data)
+                    
+                    # Auto-save to files
+                    auto_save_data()
+                    
+                    success_text = f"""✅ <b>KANAL MUVAFFAQIYATLI QO'SHILDI!</b>
+
+📺 <b>Kanal ma'lumotlari:</b>
+• Nomi: <b>{channel_name}</b>
+• Username: <code>{username}</code>
+• ID: <code>{channel_id}</code>
+• Qo'shilgan: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+🎯 <b>Endi foydalanuvchilar bu kanalga obuna bo'lish majbur!</b>
+
+📊 <b>Jami kanallar:</b> <code>{len(channels_db)}</code> ta"""
+
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '📺 Kanallar Ro\'yxati', 'callback_data': 'list_channels'},
+                                {'text': '➕ Yana Qo\'shish', 'callback_data': 'add_channel'}
+                            ],
+                            [
+                                {'text': '🔧 Test Obuna', 'callback_data': 'test_subscription'},
+                                {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                            ]
+                        ]
+                    }
+                    
+                    send_message(chat_id, success_text, keyboard)
+                    logger.info(f"✅ Channel added via command: {channel_name} ({channel_id})")
+                else:
+                    send_message(chat_id, "❌ Noto'g'ri format! Masalan: <code>/addchannel @kanal_nomi Kanal Nomi</code>")
+                    
+            except Exception as add_error:
+                logger.error(f"❌ Add channel command error: {add_error}")
+                send_message(chat_id, f"❌ Kanal qo'shishda xatolik: {str(add_error)}")
         elif text and (text.startswith('#') or text.isdigit()):
             handle_movie_request(chat_id, user_id, text)
         else:
