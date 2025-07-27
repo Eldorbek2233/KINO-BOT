@@ -79,9 +79,19 @@ def is_mongodb_available():
 # Global Data Storage
 users_db = {}
 movies_db = {}
-channels_db = {}
+channels_db = {}  # TEMPORARILY DISABLED - No mandatory subscription channels
 upload_sessions = {}
 broadcast_sessions = {}
+
+# FORCE DISABLE SUBSCRIPTION SYSTEM - TEMPORARY FIX
+def force_disable_channels():
+    """Temporarily disable all channels to fix subscription issue"""
+    global channels_db
+    channels_db.clear()  # Always keep empty
+    logger.info("🔧 FORCED CHANNEL DISABLE: All channels cleared for immediate user access")
+
+# Call force disable on module import
+force_disable_channels()
 
 # Environment-based data persistence
 def save_to_environment():
@@ -431,19 +441,10 @@ def load_data():
                     }
                 logger.info(f"✅ Loaded {len(movies_db)} movies from MongoDB")
                 
-                # Load channels from MongoDB
-                mongodb_channels = mongo_db.channels.find({'active': True})
-                for channel in mongodb_channels:
-                    channel_id = str(channel['channel_id'])
-                    channels_db[channel_id] = {
-                        'name': channel.get('name', ''),
-                        'username': channel.get('username', ''),
-                        'url': channel.get('url', ''),
-                        'add_date': channel.get('add_date', datetime.now().isoformat()),
-                        'active': channel.get('active', True),
-                        'added_by': channel.get('added_by', ADMIN_ID)
-                    }
-                logger.info(f"✅ Loaded {len(channels_db)} channels from MongoDB")
+                # DISABLED: Load channels from MongoDB - SUBSCRIPTION SYSTEM TEMPORARILY OFF
+                # This prevents loading invalid channels that cause subscription failures
+                logger.info("🔧 CHANNELS LOADING DISABLED: Subscription system is temporarily off")
+                channels_db.clear()  # Ensure channels remain empty
                 
             except Exception as e:
                 logger.error(f"❌ MongoDB loading error: {e}")
@@ -465,20 +466,24 @@ def load_data():
                 movies_db.update(file_movies)
                 logger.info(f"✅ Loaded {len(file_movies)} movies from file (backup)")
             
-        if os.path.exists('channels.json') and len(channels_db) == 0:
-            with open('channels.json', 'r', encoding='utf-8') as f:
-                file_channels = json.load(f)
-                channels_db.update(file_channels)
-                logger.info(f"✅ Loaded {len(file_channels)} channels from file (backup)")
+        # DISABLED: Load channels from file - SUBSCRIPTION SYSTEM TEMPORARILY OFF
+        # This prevents loading invalid channels from backup files
+        if os.path.exists('channels.json'):
+            logger.info("🔧 CHANNELS FILE LOADING DISABLED: Subscription system is temporarily off")
+            channels_db.clear()  # Ensure channels remain empty
             
-        logger.info(f"📊 Total loaded: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
+        # Final cleanup to ensure no channels are loaded
+        force_disable_channels()
+            
+        logger.info(f"📊 Total loaded: {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels (CHANNELS DISABLED)")
         return True
             
     except Exception as e:
         logger.error(f"❌ Data loading error: {e}")
         users_db = {}
         movies_db = {}
-        channels_db = {}
+        channels_db = {} 
+        force_disable_channels()  # Ensure channels remain disabled even on error
 
 # Telegram API Functions
 def send_message(chat_id, text, keyboard=None):
