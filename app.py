@@ -3791,17 +3791,25 @@ def check_all_subscriptions(user_id):
                             break  # Early exit for performance
                     else:
                         error_desc = result.get('description', 'Unknown error')
-                        if 'chat not found' in error_desc.lower() or 'invalid' in error_desc.lower():
+                        logger.error(f"❌ API error for channel {channel_name}: {error_desc}")
+                        if 'chat not found' in error_desc.lower() or 'invalid' in error_desc.lower() or 'bad request' in error_desc.lower():
+                            logger.info(f"🔧 Marking channel {channel_name} as inactive due to: {error_desc}")
                             channel_data['active'] = False
                             invalid_channels_found.append(channel_name)
+                            continue  # Continue checking other channels
                         else:
                             failed_channels.append(channel_name)
                             break  # Early exit for performance
                 elif response.status_code in [400, 403]:
-                    # Mark invalid channels
+                    # Mark invalid channels with detailed logging
+                    logger.warning(f"⚠️ HTTP {response.status_code} for channel {channel_name} ({channel_id}) - Bot likely not admin or channel invalid")
+                    logger.info(f"🔧 Marking channel {channel_name} as inactive to prevent future errors")
                     channel_data['active'] = False
                     invalid_channels_found.append(channel_name)
+                    # Don't add to failed_channels since we're fixing the issue by marking inactive
+                    continue  # Continue checking other channels instead of breaking
                 else:
+                    logger.error(f"❌ HTTP error {response.status_code} for channel {channel_name}")
                     failed_channels.append(channel_name)
                     break  # Early exit for performance
                     
