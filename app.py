@@ -3376,71 +3376,102 @@ def handle_channel_post(channel_post):
         logger.error(f"❌ Channel post error: {e}")
 
 def check_all_subscriptions(user_id):
-    """PROFESSIONAL SUBSCRIPTION CHECK - ULTRA FAST & RELIABLE"""
+    """IMPROVED SUBSCRIPTION CHECK - MORE RELIABLE & USER FRIENDLY"""
     try:
         if not channels_db:
             logger.info(f"✅ No channels configured - user {user_id} gets full access")
             return True  # No channels = full access
         
-        logger.info(f"🔍 Checking subscription for user {user_id} across {len(channels_db)} channels")
+        logger.info(f"🔍 Starting subscription check for user {user_id} across {len(channels_db)} channels")
         
-        # Ultra fast parallel check with immediate failure detection
+        failed_channels = []
+        success_count = 0
+        total_active_channels = 0
+        
+        # Check each channel with better error handling
         for channel_id, channel_data in channels_db.items():
             if not channel_data.get('active', True):
                 logger.info(f"⏭ Channel {channel_id} is inactive, skipping")
                 continue
             
+            total_active_channels += 1
             channel_name = channel_data.get('name', 'Unknown')
             
             try:
-                # Lightning fast API call with 2-second timeout
+                # API call with better timeout handling
                 url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
                 data = {'chat_id': channel_id, 'user_id': user_id}
-                response = requests.post(url, data=data, timeout=2)
+                response = requests.post(url, data=data, timeout=4)
                 
                 if response.status_code == 200:
                     result = response.json()
                     if result.get('ok'):
-                        status = result.get('result', {}).get('status', '')
-                        logger.info(f"📺 Channel {channel_name}: status = {status}")
+                        member_info = result.get('result', {})
+                        status = member_info.get('status', '')
+                        logger.info(f"📺 Channel {channel_name} ({channel_id}): status = {status}")
                         
-                        # Valid subscription statuses
+                        # More flexible subscription checking
                         if status in ['member', 'administrator', 'creator']:
-                            logger.info(f"✅ User {user_id} subscribed to {channel_name}")
-                            continue  # Check next channel
+                            logger.info(f"✅ User {user_id} IS subscribed to {channel_name}")
+                            success_count += 1
                         elif status == 'restricted':
                             # Check if user can send messages (not banned)
-                            can_send = result.get('result', {}).get('can_send_messages', False)
+                            can_send = member_info.get('can_send_messages', True)
                             if can_send:
-                                logger.info(f"✅ User {user_id} restricted but can send in {channel_name}")
-                                continue
+                                logger.info(f"✅ User {user_id} restricted but valid in {channel_name}")
+                                success_count += 1
                             else:
-                                logger.info(f"❌ User {user_id} restricted and cannot send in {channel_name}")
-                                return False
+                                logger.warning(f"⚠️ User {user_id} restricted and cannot send in {channel_name}")
+                                failed_channels.append(channel_name)
+                        elif status in ['left', 'kicked']:
+                            logger.warning(f"❌ User {user_id} NOT subscribed to {channel_name} (status: {status})")
+                            failed_channels.append(channel_name)
                         else:
-                            logger.info(f"❌ User {user_id} NOT subscribed to {channel_name} (status: {status})")
-                            return False  # Immediately return false on first unsubscribed
+                            logger.warning(f"⚠️ Unknown status for user {user_id} in {channel_name}: {status}")
+                            # For unknown statuses, give benefit of doubt
+                            success_count += 1
                     else:
                         error_desc = result.get('description', 'Unknown error')
                         logger.error(f"❌ API error for channel {channel_name}: {error_desc}")
-                        return False
+                        # If API error, check if it's channel-related
+                        if 'chat not found' in error_desc.lower() or 'invalid' in error_desc.lower():
+                            logger.warning(f"⚠️ Channel {channel_name} seems invalid - skipping from requirement")
+                            total_active_channels -= 1  # Don't count invalid channels
+                        else:
+                            failed_channels.append(channel_name)
+                elif response.status_code == 400:
+                    logger.warning(f"⚠️ HTTP 400 for channel {channel_name} - possibly invalid channel")
+                    total_active_channels -= 1  # Don't count invalid channels
                 else:
                     logger.error(f"❌ HTTP error {response.status_code} for channel {channel_name}")
-                    return False
+                    failed_channels.append(channel_name)
                     
             except requests.Timeout:
-                logger.error(f"⏰ Timeout checking channel {channel_name}")
-                return False
+                logger.error(f"⏰ Timeout checking channel {channel_name} - giving benefit of doubt")
+                success_count += 1  # Timeout = assume subscribed
             except Exception as e:
                 logger.error(f"❌ Exception checking channel {channel_name}: {e}")
-                return False  # Any error = not subscribed
+                failed_channels.append(channel_name)
         
-        logger.info(f"✅ User {user_id} passed ALL subscription checks!")
-        return True  # All checks passed
+        # Final decision logic
+        if total_active_channels == 0:
+            logger.info(f"ℹ️ No valid channels found - user {user_id} gets access")
+            return True
+        
+        logger.info(f"📊 Subscription check result for user {user_id}: {success_count}/{total_active_channels} channels passed")
+        
+        if success_count >= total_active_channels:
+            logger.info(f"✅ User {user_id} passed ALL subscription checks!")
+            return True
+        else:
+            logger.warning(f"❌ User {user_id} failed subscription check - missing: {failed_channels}")
+            return False
         
     except Exception as e:
         logger.error(f"❌ Critical subscription check error: {e}")
-        return False
+        # On critical error, allow access but log it
+        logger.warning(f"⚠️ Due to critical error, allowing user {user_id} access")
+        return True  # Changed from False to True - don't block users on system errors
 
 def send_subscription_message(chat_id, user_id):
     """Ultra fast subscription message with minimal checking"""
