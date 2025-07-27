@@ -1208,6 +1208,7 @@ def handle_callback_query(callback_query):
                     send_subscription_message(chat_id, user_id)
                     answer_callback_query(callback_id, "❌ Kanallarga obuna bo'ling!", True)
                     
+        # MOVIE MANAGEMENT CALLBACKS
         elif data.startswith('start_upload'):
             # Start movie upload process  
             if user_id == ADMIN_ID:
@@ -1221,6 +1222,8 @@ def handle_callback_query(callback_query):
                 handle_admin_movies_list(chat_id, user_id, callback_id)
             else:
                 answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+                
+        elif data.startswith('delete_movie_'):
             # Handle single movie deletion
             if user_id == ADMIN_ID:
                 movie_code = data.replace('delete_movie_', '')
@@ -1292,9 +1295,11 @@ def handle_callback_query(callback_query):
                 # Show subscription message on error to avoid blocking
                 send_subscription_message(chat_id, user_id)
                 logger.info(f"⚠️ User {user_id} - error occurred, showing subscription message")
+                
         elif data == 'refresh_subscription':
             # Ultra fast refresh - just show subscription message again
             send_subscription_message(chat_id, user_id)
+            answer_callback_query(callback_id, "🔄 Yangilandi")
             
         elif data == 'back_to_start':
             user_info = users_db.get(str(user_id), {})
@@ -1304,16 +1309,16 @@ def handle_callback_query(callback_query):
             handle_help_user(chat_id, user_id)
             
         else:
-            # Handle admin callbacks or show default message
-            if user_id == ADMIN_ID:
-                # Try admin callbacks
-                try:
-                    handle_admin_callbacks(chat_id, user_id, data, callback_id)
-                except:
-                    send_message(chat_id, "🔄 Tez orada qo'shiladi!")
-            else:
-                # For regular users, minimal response
-                pass
+            # Handle all remaining callbacks through admin handler
+            try:
+                handle_admin_callbacks(chat_id, user_id, data, callback_id)
+            except Exception as admin_error:
+                logger.error(f"❌ Admin callback error for {data}: {admin_error}")
+                # Fallback response
+                if user_id == ADMIN_ID:
+                    answer_callback_query(callback_id, "🔄 Tez orada qo'shiladi!")
+                else:
+                    answer_callback_query(callback_id, "❌ Ruxsat yo'q!", True)
         
     except Exception as e:
         logger.error(f"❌ Callback query error: {e}")
