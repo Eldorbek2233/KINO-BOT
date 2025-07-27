@@ -1335,7 +1335,38 @@ def handle_callback_query(callback_query):
                 # Immediate callback response
                 answer_callback_query(callback_id, "🔍 Tekshirilmoqda...")
                 
-                # Use improved subscription check function
+                # Check if channels are configured
+                if not channels_db:
+                    logger.info(f"ℹ️ No channels configured - granting immediate access to user {user_id}")
+                    # Grant access immediately when no channels are configured
+                    success_text = f"""✅ <b>MUVAFFAQIYAT!</b>
+
+🎉 Bot faol va tayyor!
+🎬 Endi botdan to'liq foydalanishingiz mumkin!
+
+💡 <b>Kino olish uchun:</b>
+• Kino kodini yuboring: <code>123</code>
+• # belgisi bilan: <code>#123</code>
+
+🎭 <b>Ultimate Professional Kino Bot ga xush kelibsiz!</b>"""
+
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
+                                {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
+                            ],
+                            [
+                                {'text': '🏠 Bosh Sahifa', 'callback_data': 'back_to_start'}
+                            ]
+                        ]
+                    }
+                    
+                    send_message(chat_id, success_text, keyboard)
+                    logger.info(f"✅ User {user_id} - no channels configured, immediate access granted")
+                    return
+                
+                # Use improved subscription check function when channels exist
                 if check_all_subscriptions(user_id):
                     # Grant access with success message
                     success_text = f"""✅ <b>MUVAFFAQIYAT!</b>
@@ -3634,6 +3665,33 @@ def send_subscription_message(chat_id, user_id):
     """Ultra fast subscription message with minimal checking"""
     try:
         if not channels_db:
+            logger.info(f"ℹ️ No channels configured - sending direct access message to user {user_id}")
+            # Send direct access message when no channels are configured
+            text = f"""✅ <b>BOT TAYYOR!</b>
+
+🎭 <b>Ultimate Professional Kino Bot</b>
+
+🎬 <b>Kino olish uchun:</b>
+• Kino kodini yuboring: <code>123</code>
+• # belgisi bilan: <code>#123</code>
+
+💡 <b>Bot to'liq faol va sizga xizmat ko'rsatishga tayyor!</b>
+
+🚀 <b>Kino kodini yuboring va zavqlaning!</b>"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
+                        {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
+                    ],
+                    [
+                        {'text': '🏠 Bosh Sahifa', 'callback_data': 'back_to_start'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, text, keyboard)
             return
         
         text = f"""📺 <b>MAJBURIY OBUNA TEKSHIRUVI</b>
