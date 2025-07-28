@@ -28,17 +28,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Railway Configuration
-try:
-    from railway_config import get_token, get_admin_id, get_webhook_url, get_port
-    TOKEN = get_token()
-    ADMIN_ID = get_admin_id()
-    logger.info("🚂 Railway configuration loaded successfully")
-except ImportError:
-    # Fallback configuration
-    TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk")
-    ADMIN_ID = int(os.getenv('ADMIN_ID', 5542016161))
-    logger.info("🔧 Using fallback configuration")
+# Configuration
+TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk")
+ADMIN_ID = int(os.getenv('ADMIN_ID', 5542016161))
 
 # MongoDB Configuration
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster')
@@ -1413,12 +1405,17 @@ def handle_callback_query(callback_query):
                     handle_all_movies(chat_id, user_id)
                     answer_callback_query(callback_id, "🎬 Barcha kinolar")
                 elif data == 'movies_list':
-                    handle_movies_list(chat_id, user_id)
-                    answer_callback_query(callback_id, "🎬 Kinolar ro'yxati")
-                else:
-                    # Admin search functionality
-                    if user_id == ADMIN_ID:
-                        text = """🔍 <b>ADMIN QIDIRUV TIZIMI</b>
+            # Admin va obuna bo'lgan foydalanuvchilar uchun ruxsat
+            if data == 'all_movies':
+                handle_all_movies(chat_id, user_id)
+                answer_callback_query(callback_id, "🎬 Barcha kinolar")
+            elif data == 'movies_list':
+                handle_movies_list(chat_id, user_id)
+                answer_callback_query(callback_id, "🎬 Kinolar ro'yxati")
+            else:
+                # Admin search functionality
+                if user_id == ADMIN_ID:
+                    text = """🔍 <b>ADMIN QIDIRUV TIZIMI</b>
 
 🎯 <b>Qidiruv usullari:</b>
 • Kino nomi bo'yicha
@@ -1427,15 +1424,15 @@ def handle_callback_query(callback_query):
 • Kod bo'yicha
 
 📝 <b>Qidiruv so'zini yuboring:</b>"""
-                        
-                        keyboard = {
-                            'inline_keyboard': [
-                                [
-                                    {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
-                                    {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
-                                ]
+                    
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
+                                {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
                             ]
-                        }
+                        ]
+                    }
                     
                     send_message(chat_id, text, keyboard)
                     answer_callback_query(callback_id, "🔍 Admin qidiruv")
@@ -1789,22 +1786,12 @@ def start_auto_save():
 
 # Webhook setup
 def setup_webhook():
-    """Professional webhook setup for Railway"""
+    """Professional webhook setup"""
     try:
-        # Railway webhook URL ni olish
-        try:
-            webhook_url = get_webhook_url()
-        except:
-            # Fallback webhook URL
-            railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN') or os.getenv('RAILWAY_STATIC_URL')
-            if railway_url:
-                if not railway_url.startswith('http'):
-                    railway_url = f"https://{railway_url}"
-                webhook_url = f"{railway_url}/webhook"
-            else:
-                webhook_url = None
-        
+        webhook_url = os.getenv('RENDER_EXTERNAL_URL')
         if webhook_url:
+            webhook_url = f"{webhook_url}/webhook"
+            
             response = requests.post(
                 f"https://api.telegram.org/bot{TOKEN}/setWebhook",
                 data={"url": webhook_url},
@@ -1813,9 +1800,9 @@ def setup_webhook():
             
             result = response.json()
             if result.get('ok'):
-                logger.info(f"✅ Railway webhook set successfully: {webhook_url}")
+                logger.info(f"✅ Webhook set successfully: {webhook_url}")
             else:
-                logger.error(f"❌ Railway webhook setup failed: {result.get('description', 'Unknown error')}")
+                logger.error(f"❌ Webhook setup failed: {result.get('description', 'Unknown error')}")
         else:
             logger.info("💡 Local development mode - webhook not configured")
             
@@ -3493,9 +3480,9 @@ Masalan: <code>Avatar 2022</code> yoki <code>Terminator 1984</code>
                 text = f"""✅ <b>Kino nomi qabul qilindi!</b>
 
 🎬 <b>Kino nomi:</b> {title}
-📌 <b>Kod:</b> <code>{session.get('code')}</code>
+� <b>Kod:</b> <code>{session.get('code')}</code>
 
-📌 <b>Qo'shimcha ma'lumotlar (ixtiyoriy):</b>
+� <b>Qo'shimcha ma'lumotlar (ixtiyoriy):</b>
 
 Yil, janr, rejissyor va boshqa ma'lumotlarni kiriting:
 Masalan: <code>2022, Action/Sci-Fi, James Cameron</code>
@@ -3902,7 +3889,7 @@ def check_all_subscriptions(user_id):
                         
                         # Handle specific API errors
                         if any(keyword in error_desc.lower() for keyword in ['chat not found', 'invalid', 'bad request']):
-                            logger.info(f"📌 Marking channel {channel_name} as inactive due to API error: {error_desc}")
+                            logger.info(f"� Marking channel {channel_name} as inactive due to API error: {error_desc}")
                             channel_data['active'] = False
                             # Don't count this channel in the check
                             continue
@@ -4101,7 +4088,7 @@ def send_subscription_message(chat_id, user_id):
 • Kino kodini yuboring: <code>123</code>
 • Hashtag bilan: <code>#123</code>
 
-📌 <b>Bot to'liq ishga tayyor!</b>"""
+� <b>Bot to'liq ishga tayyor!</b>"""
 
             keyboard = {
                 'inline_keyboard': [
@@ -4119,7 +4106,7 @@ def send_subscription_message(chat_id, user_id):
             return
         
         # Build subscription message
-        text = f"""📌 <b>MAJBURIY AZOLIK TIZIMI</b>
+        text = f"""� <b>MAJBURIY AZOLIK TIZIMI</b>
 
 🎭 <b>Ultimate Professional Kino Bot</b>
 
@@ -4182,10 +4169,9 @@ def send_subscription_message(chat_id, user_id):
         
         send_message(chat_id, text, keyboard)
         logger.info(f"📺 Sent subscription message to user {user_id} with {len(active_channels)} channels")
-        
-    except Exception as e:
-        logger.error(f"❌ Fast subscription message error: {e}")
-        # Simple fallback message text
+
+
+        # Exception handler for subscription message
         
         # Add check button with clear instructions
         keyboard['inline_keyboard'].append([
@@ -5016,7 +5002,7 @@ def handle_detailed_users(chat_id, user_id):
                              key=lambda x: x[1].get('last_seen', ''), 
                              reverse=True)
         
-        text = f"""📌 <b>BATAFSIL FOYDALANUVCHILAR RO'YXATI</b>
+        text = f"""� <b>BATAFSIL FOYDALANUVCHILAR RO'YXATI</b>
 
 📊 <b>Jami:</b> {len(users_db)} ta foydalanuvchi
 
@@ -5128,7 +5114,7 @@ def handle_active_users(chat_id, user_id):
 
 📊 <b>Jami faol:</b> {len(active_users)} ta
 📊 <b>24 soat ichida:</b> {recent_active} ta
-📌 <b>Faollik:</b> {(recent_active/len(active_users)*100) if active_users else 0:.1f}%
+� <b>Faollik:</b> {(recent_active/len(active_users)*100) if active_users else 0:.1f}%
 
 📋 <b>Eng faol foydalanuvchilar:</b>
 
@@ -5423,7 +5409,7 @@ def handle_system_logs(chat_id, user_id):
         current_time = datetime.now()
         
         # Create log summary
-        text = f"""📌 <b>TIZIM LOGLARI</b>
+        text = f"""� <b>TIZIM LOGLARI</b>
 
 ⏰ <b>So'nggi aktivity:</b>
 • Vaqt: {current_time.strftime('%Y-%m-%d %H:%M:%S')}
@@ -5878,7 +5864,7 @@ def handle_upload_confirmation(chat_id, user_id, callback_id):
 
 {storage_info}
 
-📌 <b>Statistika:</b>
+� <b>Statistika:</b>
 • **Jami kinolar:** {len(movies_db)} ta
 • **Database:** Professional MongoDB + JSON backup
 
@@ -7430,7 +7416,7 @@ def handle_broadcast_statistics(chat_id, user_id, callback_id):
         
         text = f"""📊 <b>REKLAMA STATISTIKASI</b>
 
-📌 <b>Asosiy ma'lumotlar:</b>
+� <b>Asosiy ma'lumotlar:</b>
 • Jami foydalanuvchilar: <code>{len(users_db)}</code> ta
 • Faol reklamalar: <code>0</code> ta
 • So'nggi reklama: <code>Mavjud emas</code>
@@ -7875,7 +7861,7 @@ def send_subscription_message(chat_id, user_id):
 
 🎭 <b>Ultimate Professional Kino Bot</b>
 
-📌 <b>Botdan foydalanish uchun quyidagi {len(active_channels)} ta kanalga obuna bo'ling:</b>
+� <b>Botdan foydalanish uchun quyidagi {len(active_channels)} ta kanalga obuna bo'ling:</b>
 
 """
         
@@ -8465,13 +8451,9 @@ if __name__ == "__main__":
         # Initialize bot first
         initialize_bot()
         
-        # Start Flask server with Railway config
-        try:
-            port = get_port()
-        except:
-            port = int(os.environ.get('PORT', 8000))
-        
-        logger.info(f"🚂 Professional Kino Bot starting on Railway port {port}")
+        # Start Flask server
+        port = int(os.environ.get('PORT', 8080))
+        logger.info(f"🎭 Professional Kino Bot starting on port {port}")
         logger.info(f"📊 Database: MongoDB {'✅' if is_mongodb_available() else '❌'} + JSON backup ✅")
         
         app.run(
