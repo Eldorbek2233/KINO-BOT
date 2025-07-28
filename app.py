@@ -869,6 +869,30 @@ def stats_endpoint():
         }
     })
 
+@app.route('/')
+def index():
+    """Health check endpoint"""
+    try:
+        bot_info = f"""🎭 <b>Ultimate Professional Kino Bot</b>
+        
+📊 <b>Status:</b> ✅ Running on Railway
+🤖 <b>Bot:</b> @{TOKEN.split(':')[0]}
+👥 <b>Users:</b> {len(users_db)}
+🎬 <b>Movies:</b> {len(movies_db)}
+📺 <b>Channels:</b> {len(channels_db)}
+⏰ <b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+🔗 <b>Webhook:</b> {get_webhook_url()}
+        """
+        return bot_info
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@app.route('/health')
+def health():
+    """Simple health check"""
+    return {"status": "OK", "bot": "running", "time": datetime.now().isoformat()}
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Professional webhook handler with full error handling"""
@@ -880,21 +904,26 @@ def webhook():
             return "Empty data", 400
         
         logger.info(f"📨 Webhook received: {data.get('update_id', 'unknown')}")
+        logger.info(f"📋 Webhook data keys: {list(data.keys())}")
         
         # Handle different update types
         if 'message' in data:
+            logger.info(f"💬 Processing message from user {data['message'].get('from', {}).get('id')}")
             handle_message(data['message'])
         elif 'callback_query' in data:
+            logger.info(f"🔘 Processing callback from user {data['callback_query'].get('from', {}).get('id')}")
             handle_callback_query(data['callback_query'])
         elif 'channel_post' in data:
+            logger.info(f"📺 Processing channel post")
             handle_channel_post(data['channel_post'])
         else:
-            logger.info(f"ℹ️ Unhandled update type: {list(data.keys())}")
+            logger.warning(f"❓ Unhandled update type: {list(data.keys())}")
             
         return "OK", 200
         
     except Exception as e:
         logger.error(f"❌ Webhook error: {e}")
+        logger.error(f"❌ Webhook data: {request.get_data()[:500]}")
         return f"Error: {str(e)}", 500
 
 def handle_message(message):
@@ -905,6 +934,8 @@ def handle_message(message):
         user_id = message.get('from', {}).get('id')
         text = message.get('text', '')
         user_info = message.get('from', {})
+        
+        logger.info(f"🔍 Processing message: chat_id={chat_id}, user_id={user_id}, text='{text[:50]}'")
         
         # Save user
         save_user(user_info, user_id)
@@ -1781,16 +1812,13 @@ def setup_webhook():
         try:
             webhook_url = get_webhook_url()
         except:
-            # Fallback webhook URL
-            railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN') or os.getenv('RAILWAY_STATIC_URL')
-            if railway_url:
-                if not railway_url.startswith('http'):
-                    railway_url = f"https://{railway_url}"
-                webhook_url = f"{railway_url}/webhook"
-            else:
-                webhook_url = None
+            # Fallback webhook URL - use hardcoded Railway URL
+            webhook_url = "https://kino-bot.up.railway.app/webhook"
+            logger.info(f"⚠️ Using fallback webhook URL: {webhook_url}")
         
         if webhook_url:
+            logger.info(f"🔧 Setting webhook to: {webhook_url}")
+            
             response = requests.post(
                 f"https://api.telegram.org/bot{TOKEN}/setWebhook",
                 data={"url": webhook_url},
@@ -1800,6 +1828,17 @@ def setup_webhook():
             result = response.json()
             if result.get('ok'):
                 logger.info(f"✅ Railway webhook set successfully: {webhook_url}")
+                
+                # Verify webhook
+                verify_response = requests.get(
+                    f"https://api.telegram.org/bot{TOKEN}/getWebhookInfo",
+                    timeout=10
+                )
+                webhook_info = verify_response.json()
+                if webhook_info.get('ok'):
+                    info = webhook_info.get('result', {})
+                    logger.info(f"📋 Webhook info: URL={info.get('url')}, pending={info.get('pending_update_count', 0)}")
+                
             else:
                 logger.error(f"❌ Railway webhook setup failed: {result.get('description', 'Unknown error')}")
         else:
@@ -1807,6 +1846,21 @@ def setup_webhook():
             
     except Exception as e:
         logger.error(f"❌ Webhook setup error: {e}")
+        # Force set webhook as fallback
+        try:
+            fallback_url = "https://kino-bot.up.railway.app/webhook"
+            logger.info(f"🔄 Trying fallback webhook: {fallback_url}")
+            response = requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/setWebhook",
+                data={"url": fallback_url},
+                timeout=10
+            )
+            if response.json().get('ok'):
+                logger.info("✅ Fallback webhook set successfully")
+            else:
+                logger.error("❌ Fallback webhook also failed")
+        except Exception as fallback_error:
+            logger.error(f"❌ Fallback webhook error: {fallback_error}")
 
 # Initialize Professional Bot
 def initialize_bot():

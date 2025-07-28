@@ -36,7 +36,12 @@ def get_admin_id():
 
 def get_webhook_url():
     """Railway webhook URL ni olish"""
-    railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
+    # Railway environment variables
+    railway_url = (
+        os.getenv("RAILWAY_PUBLIC_DOMAIN") or 
+        os.getenv("RAILWAY_STATIC_URL") or
+        os.getenv("RAILWAY_PROJECT_DOMAIN")
+    )
     
     if railway_url:
         # Railway URL format: https://your-app.up.railway.app  
@@ -44,9 +49,9 @@ def get_webhook_url():
             railway_url = f"https://{railway_url}"
         webhook_url = f"{railway_url}/webhook"
     else:
-        # Default Railway URL pattern (avtomatik)
-        app_name = os.getenv("RAILWAY_PROJECT_NAME", "kino-bot")
-        webhook_url = f"https://{app_name}.up.railway.app/webhook"
+        # Haqiqiy Railway domain'dan foydalanish
+        # Railway deployment logidan olingan URL
+        webhook_url = "https://kino-bot.up.railway.app/webhook"
     
     print(f"🚂 Railway webhook URL: {webhook_url}")
     return webhook_url
