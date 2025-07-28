@@ -1261,47 +1261,38 @@ def handle_start_command(chat_id, user_id, user_info):
                 ]
             }
         else:
-            # STEP 1: CHECK SUBSCRIPTION FOR REGULAR USERS
-            is_subscribed = check_all_subscriptions(user_id)
-            if not is_subscribed:
-                logger.info(f"❌ User {user_id} not subscribed - showing subscription message")
-                send_subscription_message(chat_id, user_id)
-                return
+            # STEP 1: FAST SUBSCRIPTION CHECK FOR REGULAR USERS
+            if channels_db:  # Only check if channels exist
+                is_subscribed = check_all_subscriptions(user_id)
+                if not is_subscribed:
+                    logger.info(f"❌ User {user_id} not subscribed - showing subscription message")
+                    send_subscription_message(chat_id, user_id)
+                    return
             
-            # Regular user start message - only shown if subscribed
-            text = f"""🎭 <b>Ultimate Professional Kino Bot ga xush kelibsiz!</b>
+            # Regular user start message - only shown if subscribed or no channels
+            text = f"""🎭 <b>Ultimate Professional Kino Bot</b>
 
-👋 Salom {user_name}! Eng zamonaviy kino bot xizmatida!
+👋 Salom {user_name}!
 
 🎬 <b>Kino qidirish:</b>
-• Kino kodini yuboring: <code>#123</code>
-• Yoki raqam bilan: <code>123</code>
+• Kod yuboring: <code>123</code> yoki <code>#123</code>
 
-📊 <b>Mavjud kontentlar:</b>
-• 🎬 Kinolar: <code>{len(movies_db)}</code> ta
-• 📱 Faol bot: <code>24/7</code>
+📊 <b>Mavjud:</b> <code>{len(movies_db)}</code> ta kino
 
-💎 <b>Premium xususiyatlar:</b>
-• Yuqori sifatli videolar
-• Tezkor qidiruv tizimi
-• Professional interfeys
-• Barcha janrlar mavjud
+🚀 <b>Kino kodini yuboring!</b>"""
 
-🚀 <b>Boshlash uchun kino kodini yuboring!</b>"""
-
-            # Create simple keyboard without showing movie codes
-            keyboard = {'inline_keyboard': []}
-            
-            # Add utility buttons  
-            keyboard['inline_keyboard'].extend([
-                [
-                    {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
-                    {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
-                ],
-                [
-                    {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
+            # Simple keyboard for fast loading
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
+                        {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
+                    ],
+                    [
+                        {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
+                    ]
                 ]
-            ])
+            }
         
         send_message(chat_id, text, keyboard)
         logger.info(f"✅ Start command sent to {user_id} ({'Admin' if user_id == ADMIN_ID else 'User'})")
@@ -1975,57 +1966,110 @@ def handle_statistics(chat_id, user_id):
         send_message(chat_id, "❌ Statistika xatolik!")
 
 def handle_movie_request(chat_id, user_id, code):
-    """Professional movie request handler with subscription check"""
+    """FAST movie request handler with subscription check"""
     try:
-        # STEP 1: CHECK SUBSCRIPTION FIRST
-        if user_id != ADMIN_ID:  # Admin always has access
+        # STEP 1: SUBSCRIPTION CHECK FOR NON-ADMIN USERS
+        if user_id != ADMIN_ID and channels_db:
             is_subscribed = check_all_subscriptions(user_id)
             if not is_subscribed:
                 logger.info(f"❌ User {user_id} tried to access movie {code} but not subscribed")
                 send_subscription_message(chat_id, user_id)
                 return
-            else:
-                logger.info(f"✅ User {user_id} subscription verified for movie {code}")
         
         # Clean and normalize code
-        original_code = code.strip()
         clean_code = code.replace('#', '').strip()
-        code_with_hash = f"#{clean_code}"
         
-        logger.info(f"🎬 Movie request: user={user_id}, code='{original_code}'")
+        logger.info(f"🎬 Movie request: user={user_id}, code='{clean_code}'")
         
-        # Search for movie in both MongoDB and local storage
+        # Search for movie (try multiple formats)
         movie_data = None
         found_code = None
         
-        # First, search in local storage (faster)
-        for search_code in [clean_code, code_with_hash, original_code]:
+        # Search in local storage first (fastest)
+        for search_code in [clean_code, f"#{clean_code}", code.strip()]:
             if search_code in movies_db:
                 movie_data = movies_db[search_code]
                 found_code = search_code
                 break
         
-        # If not found in local storage, search in MongoDB
+        # If not found locally, try MongoDB
         if not movie_data and is_mongodb_available():
             try:
-                for search_code in [clean_code, code_with_hash, original_code]:
-                    mongo_movie = get_movie_from_mongodb(search_code)
-                    if mongo_movie:
-                        movie_data = {
-                            'file_id': mongo_movie['file_id'],
-                            'title': mongo_movie.get('title', ''),
-                            'file_name': mongo_movie.get('file_name', ''),
-                            'file_size': mongo_movie.get('file_size', 0),
-                            'additional_info': mongo_movie.get('additional_info', ''),
-                            'upload_date': mongo_movie.get('upload_date', ''),
-                        }
-                        found_code = search_code
-                        # Add to local storage for faster future access
-                        movies_db[search_code] = movie_data
-                        logger.info(f"🔄 Movie loaded from MongoDB to cache: {search_code}")
-                        break
+                mongo_movie = get_movie_from_mongodb(clean_code)
+                if mongo_movie:
+                    movie_data = {
+                        'file_id': mongo_movie['file_id'],
+                        'title': mongo_movie.get('title', ''),
+                        'file_name': mongo_movie.get('file_name', ''),
+                        'additional_info': mongo_movie.get('additional_info', '')
+                    }
+                    found_code = clean_code
+                    # Cache it locally
+                    movies_db[clean_code] = movie_data
             except Exception as e:
                 logger.error(f"❌ MongoDB search error: {e}")
+        
+        if movie_data:
+            # Movie found - send it
+            file_id = movie_data['file_id']
+            title = movie_data.get('title', f'Kino #{clean_code}')
+            
+            # Create caption
+            caption = f"""🎬 <b>{title}</b>
+
+🔢 <b>Kod:</b> <code>#{clean_code}</code>
+📱 <b>Bot:</b> @uzmovi_film_bot
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+            
+            # Create keyboard
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '🎬 Boshqa Kinolar', 'callback_data': 'all_movies'},
+                        {'text': '🏠 Bosh Sahifa', 'callback_data': 'back_to_start'}
+                    ],
+                    [
+                        {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
+                    ]
+                ]
+            }
+            
+            # Send video
+            result = send_video(chat_id, file_id, caption, keyboard)
+            
+            if result:
+                logger.info(f"✅ Movie sent: {title} to user {user_id}")
+            else:
+                # Fallback: send as text if video fails
+                send_message(chat_id, f"❌ Video yuborishda xatolik: {title}")
+        else:
+            # Movie not found
+            not_found_text = f"""❌ <b>KINO TOPILMADI</b>
+
+🔍 <b>Qidiruv kodi:</b> <code>#{clean_code}</code>
+
+💡 <b>Maslahatlar:</b>
+• Kod to'g'ri yozilganligini tekshiring
+• Raqamlarni aniq kiriting
+• # belgisiz ham sinab ko'ring
+
+🎬 <b>Mavjud kinolar:</b> <code>/start</code> bosing"""
+
+            keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
+                        {'text': '🏠 Bosh Sahifa', 'callback_data': 'back_to_start'}
+                    ]
+                ]
+            }
+            
+            send_message(chat_id, not_found_text, keyboard)
+            logger.info(f"❌ Movie not found: {clean_code} for user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Movie request error: {e}")
+        send_message(chat_id, "❌ Texnik xatolik yuz berdi. Iltimos qayta urinib ko'ring.")
         
         if movie_data:
             # Movie found - send it
@@ -2146,6 +2190,13 @@ Admin bilan bog'laning: @Eldorbek_Xakimxujayev
 def handle_all_movies(chat_id, user_id):
     """Show all available movies in a professional format"""
     try:
+        # SUBSCRIPTION CHECK FOR NON-ADMIN
+        if user_id != ADMIN_ID and channels_db:
+            is_subscribed = check_all_subscriptions(user_id)
+            if not is_subscribed:
+                send_subscription_message(chat_id, user_id)
+                return
+        
         # Combine both MongoDB and local storage movies
         all_movies = {}
         
@@ -2243,6 +2294,13 @@ def handle_all_movies(chat_id, user_id):
 def handle_help_user(chat_id, user_id):
     """Professional help for regular users"""
     try:
+        # SUBSCRIPTION CHECK FOR NON-ADMIN
+        if user_id != ADMIN_ID and channels_db:
+            is_subscribed = check_all_subscriptions(user_id)
+            if not is_subscribed:
+                send_subscription_message(chat_id, user_id)
+                return
+        
         text = f"""ℹ️ <b>ULTIMATE PROFESSIONAL KINO BOT - YORDAM</b>
 
 🎭 <b>Bot haqida:</b>
@@ -3818,10 +3876,15 @@ def handle_cleanup_channels(chat_id, user_id):
 
 def check_all_subscriptions(user_id):
     """
-    NEW ROBUST SUBSCRIPTION SYSTEM - Error-free and reliable
+    FAST & RELIABLE SUBSCRIPTION SYSTEM
     Checks user subscription to all active channels with proper error handling
     """
     try:
+        # Admin bypass
+        if user_id == ADMIN_ID:
+            logger.info(f"👑 Admin {user_id} - subscription check bypassed")
+            return True
+        
         # Skip if no channels configured
         if not channels_db:
             logger.info(f"ℹ️ No channels configured - user {user_id} gets immediate access")
@@ -3832,7 +3895,7 @@ def check_all_subscriptions(user_id):
         if user_id in subscription_cache:
             cache_data = subscription_cache[user_id]
             if current_time < cache_data.get('expires', 0):
-                logger.info(f"📋 Using cached subscription result for user {user_id}: {cache_data['is_subscribed']}")
+                logger.info(f"⚡ Cached result for user {user_id}: {cache_data['is_subscribed']}")
                 return cache_data['is_subscribed']
             else:
                 # Cache expired, remove it
@@ -3843,29 +3906,21 @@ def check_all_subscriptions(user_id):
         
         if not active_channels:
             logger.info(f"ℹ️ No active channels - user {user_id} gets immediate access")
-            # Cache the result
-            subscription_cache[user_id] = {
-                'last_check': current_time,
-                'is_subscribed': True,
-                'expires': current_time + CACHE_DURATION
-            }
             return True
         
-        logger.info(f"🔍 Checking subscription for user {user_id} in {len(active_channels)} active channels")
+        logger.info(f"🔍 Checking user {user_id} subscription to {len(active_channels)} channels")
         
         subscribed_count = 0
-        failed_channels = []
+        total_channels = len(active_channels)
         
-        # Check each active channel with robust error handling
+        # Check each active channel with fast timeout
         for channel_id, channel_data in active_channels.items():
-            channel_name = channel_data.get('name', f'Channel {channel_id}')
-            
             try:
-                # Make API request with timeout
+                # Fast API request with 3-second timeout
                 url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
                 payload = {'chat_id': channel_id, 'user_id': user_id}
                 
-                response = requests.post(url, json=payload, timeout=5)
+                response = requests.post(url, json=payload, timeout=3)
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -3874,10 +3929,50 @@ def check_all_subscriptions(user_id):
                         member_info = result.get('result', {})
                         status = member_info.get('status', '')
                         
-                        # Check if user is properly subscribed
+                        # Check if user is subscribed
                         if status in ['member', 'administrator', 'creator']:
                             subscribed_count += 1
-                            logger.debug(f"✅ User {user_id} subscribed to {channel_name} (status: {status})")
+                        elif status in ['left', 'kicked']:
+                            logger.info(f"❌ User {user_id} not subscribed to {channel_id}")
+                    else:
+                        # API error - assume not subscribed
+                        logger.warning(f"⚠️ API error for channel {channel_id}: {result.get('description', 'Unknown')}")
+                        
+                elif response.status_code in [400, 403, 404]:
+                    # Channel issues - skip this channel but don't grant access
+                    logger.warning(f"⚠️ Channel {channel_id} issue: HTTP {response.status_code}")
+                    
+            except requests.exceptions.Timeout:
+                logger.warning(f"⏰ Timeout checking channel {channel_id}")
+                # On timeout, assume not subscribed for security
+                
+            except Exception as e:
+                logger.error(f"❌ Error checking channel {channel_id}: {e}")
+                # On error, assume not subscribed for security
+        
+        # Determine if user is fully subscribed
+        is_fully_subscribed = (subscribed_count == total_channels)
+        
+        # Cache the result for 5 minutes
+        subscription_cache[user_id] = {
+            'last_check': current_time,
+            'is_subscribed': is_fully_subscribed,
+            'expires': current_time + CACHE_DURATION,
+            'subscribed_count': subscribed_count,
+            'total_channels': total_channels
+        }
+        
+        if is_fully_subscribed:
+            logger.info(f"✅ User {user_id} subscribed to ALL {total_channels} channels")
+        else:
+            logger.info(f"❌ User {user_id} subscribed to {subscribed_count}/{total_channels} channels")
+        
+        return is_fully_subscribed
+        
+    except Exception as e:
+        logger.error(f"❌ Subscription check critical error for user {user_id}: {e}")
+        # On critical error, deny access for security
+        return False
                         elif status == 'restricted':
                             # Check if user can send messages (not banned)
                             can_send = member_info.get('can_send_messages', True)
@@ -4079,7 +4174,7 @@ def check_all_subscriptions(user_id):
 
 def send_subscription_message(chat_id, user_id):
     """
-    NEW ROBUST SUBSCRIPTION MESSAGE - Clean and user-friendly
+    FAST & CLEAN SUBSCRIPTION MESSAGE
     Shows all active channels with proper links and clear instructions
     """
     try:
@@ -4103,9 +4198,6 @@ def send_subscription_message(chat_id, user_id):
                     [
                         {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
                         {'text': 'ℹ️ Yordam', 'callback_data': 'help_user'}
-                    ],
-                    [
-                        {'text': '🏠 Bosh Sahifa', 'callback_data': 'back_to_start'}
                     ]
                 ]
             }
@@ -4114,39 +4206,31 @@ def send_subscription_message(chat_id, user_id):
             return
         
         # Build subscription message
-        text = f"""📌 <b>MAJBURIY AZOLIK TIZIMI</b>
+        text = f"""� <b>MAJBURIY AZOLIK</b>
 
 🎭 <b>Ultimate Professional Kino Bot</b>
 
-📋 <b>Botdan foydalanish uchun quyidagi {len(active_channels)} ta kanalga obuna bo'ling:</b>
+📋 <b>Botdan foydalanish uchun {len(active_channels)} ta kanalga obuna bo'ling:</b>
 
 """
         
         keyboard = {'inline_keyboard': []}
         channel_num = 1
         
-        # Add each active channel
-        for channel_id, channel_data in active_channels.items():
+        # Add each active channel (maximum 8 channels for clean display)
+        for channel_id, channel_data in list(active_channels.items())[:8]:
             channel_name = channel_data.get('name', f'Kanal {channel_num}')
             username = channel_data.get('username', '').replace('@', '')
             
             # Add to text
-            text += f"{channel_num}. <b>{channel_name}</b>"
-            if username:
-                text += f" (@{username})"
-            text += "\n"
+            text += f"{channel_num}. <b>{channel_name}</b>\n"
             
             # Create proper channel URL
             if username:
                 channel_url = f'https://t.me/{username}'
             else:
-                # For private channels or channels without username
-                invite_link = channel_data.get('invite_link')
-                if invite_link:
-                    channel_url = invite_link
-                else:
-                    # Fallback URL (might not work for private channels)
-                    channel_url = f'https://t.me/c/{str(channel_id).replace("-100", "")}'
+                # For channels without username
+                channel_url = f'https://t.me/c/{str(channel_id).replace("-100", "")}'
             
             # Add channel button
             keyboard['inline_keyboard'].append([
@@ -4157,10 +4241,43 @@ def send_subscription_message(chat_id, user_id):
         
         # Add instructions
         text += f"""
-💡 <b>MUHIM:</b>
-✅ Barcha kanallarga obuna bo'ling
-✅ "Tekshirish" tugmasini bosing
-✅ Natijani kuting
+💡 <b>Qadamlar:</b>
+1️⃣ Yuqoridagi barcha kanallarga obuna bo'ling
+2️⃣ "✅ TEKSHIRISH" tugmasini bosing
+
+⚡ <b>Tez va oson!</b>"""
+        
+        # Add check subscription button
+        keyboard['inline_keyboard'].append([
+            {'text': '✅ TEKSHIRISH', 'callback_data': 'check_subscription'}
+        ])
+        
+        # Add help button
+        keyboard['inline_keyboard'].append([
+            {'text': '❓ Yordam', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
+        ])
+        
+        send_message(chat_id, text, keyboard)
+        logger.info(f"📺 Subscription message sent to user {user_id} with {len(active_channels)} channels")
+        
+    except Exception as e:
+        logger.error(f"❌ Subscription message error: {e}")
+        # Simple fallback message
+        fallback_text = """� <b>Majburiy obuna!</b>
+
+Botdan foydalanish uchun kanalga obuna bo'ling.
+
+🎭 <b>Ultimate Professional Kino Bot</b>"""
+        
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔍 Tekshirish', 'callback_data': 'check_subscription'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, fallback_text, keyboard)
 
 ⚠️ <b>Agar biror kanal ochilmasa, boshqa brauzer yoki Telegram ilovasidan foydalaning!</b>
 
