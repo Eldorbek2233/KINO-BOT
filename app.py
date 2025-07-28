@@ -1130,6 +1130,46 @@ def handle_message(message):
             except Exception as cache_error:
                 logger.error(f"❌ Clear cache error: {cache_error}")
                 send_message(chat_id, f"❌ Cache clear error: {str(cache_error)}")
+        elif text == '/testuser' and user_id == ADMIN_ID:
+            # Test subscription as regular user (bypass admin privileges)
+            try:
+                logger.info(f"🧪 Admin {user_id} testing as regular user")
+                
+                # Clear admin cache first
+                if user_id in subscription_cache:
+                    del subscription_cache[user_id]
+                
+                # Temporarily treat admin as regular user for subscription check
+                if channels_db:
+                    # Create fake user_id for testing (admin_id + 1)
+                    test_user_id = user_id + 1
+                    is_subscribed = check_all_subscriptions(test_user_id)
+                    
+                    if is_subscribed:
+                        test_result = "✅ Test user CAN access bot"
+                    else:
+                        test_result = "❌ Test user CANNOT access bot"
+                else:
+                    test_result = "ℹ️ No channels configured - all users have access"
+                
+                result_text = f"""🧪 <b>USER SUBSCRIPTION TEST</b>
+
+🔍 <b>Test Result:</b>
+{test_result}
+
+📊 <b>Test Details:</b>
+• Test User ID: <code>{test_user_id}</code>
+• Active Channels: <code>{len([c for c in channels_db.values() if c.get('active', True)])}</code>
+• Total Channels: <code>{len(channels_db)}</code>
+
+💡 <b>This shows how regular users experience the subscription system.</b>"""
+                
+                send_message(chat_id, result_text)
+                logger.info(f"✅ Admin {user_id} completed user test: {test_result}")
+                
+            except Exception as test_error:
+                logger.error(f"❌ Test user error: {test_error}")
+                send_message(chat_id, f"❌ Test error: {str(test_error)}")
         elif text == '/addchannel' and user_id == ADMIN_ID:
             # Quick add channel command for admin
             text = """➕ <b>YANGI KANAL QO'SHISH</b>
@@ -1488,26 +1528,33 @@ def handle_callback_query(callback_query):
                 answer_callback_query(callback_id, "🔍 Qidiruv")
         
         elif data == 'check_subscription':
-            # Handle subscription check callback
+            # Handle subscription check callback - FRESH CHECK ALWAYS
             if user_id == ADMIN_ID:
                 # Admin always has access
                 user_info = users_db.get(str(user_id), {})
                 handle_start_command(chat_id, user_id, user_info)
                 answer_callback_query(callback_id, "👑 Admin - majburiy azolik yo'q")
             else:
-                # Check subscription for regular users
+                # CLEAR CACHE BEFORE FRESH CHECK
+                if user_id in subscription_cache:
+                    del subscription_cache[user_id]
+                    logger.info(f"🧹 Cache cleared for user {user_id} before manual check")
+                
+                # Fresh check subscription for regular users
+                logger.info(f"🔍 Manual fresh subscription check for user {user_id}")
                 is_subscribed = check_all_subscriptions(user_id)
+                
                 if is_subscribed:
                     # User is subscribed - show main menu
                     user_info = users_db.get(str(user_id), {})
                     handle_start_command(chat_id, user_id, user_info)
                     answer_callback_query(callback_id, "✅ Obuna tasdiqlandi!")
-                    logger.info(f"✅ User {user_id} subscription verified via callback")
+                    logger.info(f"✅ User {user_id} subscription verified via manual check")
                 else:
                     # User is not subscribed - show subscription message again
                     send_subscription_message(chat_id, user_id)
                     answer_callback_query(callback_id, "❌ Barcha kanallarga obuna bo'ling!", True)
-                    logger.info(f"❌ User {user_id} subscription failed via callback")
+                    logger.info(f"❌ User {user_id} subscription failed via manual check")
             
         elif data == 'add_channel':
             # Start channel addition process
@@ -1709,9 +1756,13 @@ def handle_callback_query(callback_query):
                 send_subscription_message(chat_id, user_id)
                 
         elif data == 'refresh_subscription':
-            # Ultra fast refresh - just show subscription message again
+            # Clear cache and show fresh subscription message
+            if user_id in subscription_cache:
+                del subscription_cache[user_id]
+                logger.info(f"🧹 Cache cleared for user {user_id} on refresh")
+            
             send_subscription_message(chat_id, user_id)
-            answer_callback_query(callback_id, "🔄 Yangilandi")
+            answer_callback_query(callback_id, "🔄 Yangi holatga keltirildi")
             
         elif data == 'back_to_start':
             user_info = users_db.get(str(user_id), {})
@@ -2788,6 +2839,7 @@ def handle_help_admin(chat_id, user_id):
 • <code>/addchannel @username Nom</code> - Tezkor kanal qo'shish
 • <code>/clearcache</code> - Subscription cache tozalash
 • <code>/cleanup</code> - Nofaol kanallar tozalash
+• <code>/testuser</code> - Oddiy foydalanuvchi sifatida test qilish
 
 📞 <b>Texnik yordam:</b>
 • GitHub: Eldorbek2233/KINO-BOT
@@ -4127,8 +4179,9 @@ def send_subscription_message(chat_id, user_id):
             {'text': '✅ TEKSHIRISH', 'callback_data': 'check_subscription'}
         ])
         
-        # Add help button
+        # Add refresh and help buttons
         keyboard['inline_keyboard'].append([
+            {'text': '🔄 Yangilash', 'callback_data': 'refresh_subscription'},
             {'text': '❓ Yordam', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
         ])
         
