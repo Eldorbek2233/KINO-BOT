@@ -869,30 +869,6 @@ def stats_endpoint():
         }
     })
 
-@app.route('/')
-def index():
-    """Health check endpoint"""
-    try:
-        bot_info = f"""🎭 <b>Ultimate Professional Kino Bot</b>
-        
-📊 <b>Status:</b> ✅ Running on Railway
-🤖 <b>Bot:</b> @{TOKEN.split(':')[0]}
-👥 <b>Users:</b> {len(users_db)}
-🎬 <b>Movies:</b> {len(movies_db)}
-📺 <b>Channels:</b> {len(channels_db)}
-⏰ <b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-🔗 <b>Webhook:</b> {get_webhook_url()}
-        """
-        return bot_info
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-@app.route('/health')
-def health():
-    """Simple health check"""
-    return {"status": "OK", "bot": "running", "time": datetime.now().isoformat()}
-
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Professional webhook handler with full error handling"""
