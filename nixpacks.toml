@@ -1,22 +1,5 @@
-[phases.build]
-cmd = "pip install -r requirements.txt"
-
-[phases.start]
-[phases.setup]
-nixPkgs = ['python310', 'pip']
-
-[phases.install]
-cmds = ['pip install -r requirements.txt']
-
-[phases.build]
-cmds = ['echo "Building Professional Kino Bot for Railway..."']
-
 [start]
-cmd = 'gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 0 app:app'
-
-[variables]
-PYTHON_VERSION = "3.10"
-PORT = "8000"
+cmd = 'python app.py'
 
 [variables]
 PYTHONUNBUFFERED = "1"
