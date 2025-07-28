@@ -87,7 +87,39 @@ def is_mongodb_available():
 # Global Data Storage
 users_db = {}
 movies_db = {}
+def save_channels_to_file():
+    """Save channels to JSON file for persistence"""
+    try:
+        with open('channels.json', 'w', encoding='utf-8') as f:
+            json.dump(channels_db, f, ensure_ascii=False, indent=2)
+        logger.info(f"💾 Channels saved to file: {len(channels_db)} channels")
+    except Exception as e:
+        logger.error(f"❌ Error saving channels: {e}")
+
+def load_channels_from_file():
+    """Load channels from JSON file"""
+    global channels_db
+    try:
+        if os.path.exists('channels.json'):
+            with open('channels.json', 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    channels_db = json.loads(content)
+                    logger.info(f"📂 Channels loaded from file: {len(channels_db)} channels")
+                else:
+                    logger.info("📂 Channels file is empty, using default")
+                    channels_db = {}
+        else:
+            logger.info("📂 Channels file not found, creating new one")
+            channels_db = {}
+            save_channels_to_file()
+    except Exception as e:
+        logger.error(f"❌ Error loading channels: {e}")
+        channels_db = {}
+
+# Initialize channels database
 channels_db = {}  # Majburiy azolik kanallari - FAOL
+load_channels_from_file()
 upload_sessions = {}
 broadcast_sessions = {}
 
@@ -1089,6 +1121,7 @@ def handle_message(message):
                         invalid_count += 1
                 
                 # Save changes
+                save_channels_to_file()  # Saqlash
                 auto_save_data()
                 
                 result_text = f"""🧹 <b>CHANNEL CLEANUP COMPLETED</b>
@@ -1170,6 +1203,44 @@ def handle_message(message):
             except Exception as test_error:
                 logger.error(f"❌ Test user error: {test_error}")
                 send_message(chat_id, f"❌ Test error: {str(test_error)}")
+        elif text == '/listchannels' and user_id == ADMIN_ID:
+            # List all channels with detailed info for debugging
+            try:
+                if not channels_db:
+                    result_text = """📺 <b>KANALLAR RO'YXATI</b>
+
+❌ <b>Hech qanday kanal topilmadi!</b>
+
+💡 <b>Kanal qo'shish uchun:</b>
+• <code>/addchannel @username Kanal_Nomi</code>
+• Yoki admin panel orqali"""
+                else:
+                    result_text = f"""📺 <b>KANALLAR RO'YXATI</b>
+
+📊 <b>Jami:</b> <code>{len(channels_db)}</code> ta kanal
+
+"""
+                    
+                    for i, (channel_id, channel_data) in enumerate(channels_db.items(), 1):
+                        name = channel_data.get('name', 'Unknown')
+                        username = channel_data.get('username', 'N/A')
+                        active = '✅ Faol' if channel_data.get('active', True) else '❌ Nofaol'
+                        add_date = channel_data.get('add_date', 'Unknown')[:10] if channel_data.get('add_date') else 'Unknown'
+                        
+                        result_text += f"""<b>{i}. {name}</b>
+🆔 ID: <code>{channel_id}</code>
+👤 Username: <code>{username}</code>
+📅 Qo'shilgan: <code>{add_date}</code>
+🔄 Holat: {active}
+
+"""
+                
+                send_message(chat_id, result_text)
+                logger.info(f"✅ Admin {user_id} listed {len(channels_db)} channels")
+                
+            except Exception as list_error:
+                logger.error(f"❌ List channels error: {list_error}")
+                send_message(chat_id, f"❌ Kanallar ro'yxatini ko'rsatishda xatolik: {str(list_error)}")
         elif text == '/addchannel' and user_id == ADMIN_ID:
             # Quick add channel command for admin
             text = """➕ <b>YANGI KANAL QO'SHISH</b>
@@ -3466,7 +3537,8 @@ def handle_add_channel_session(chat_id, message):
             
             # Save to memory with string key
             channels_db[str(channel_id)] = channel_data
-            logger.info(f"💾 Channel saved to memory: {channel_id} -> {channel_name}")
+            save_channels_to_file()  # Saqlash
+            logger.info(f"💾 Channel saved to memory and file: {channel_id} -> {channel_name}")
             
             # YANGI KANAL QO'SHILGANDA SUBSCRIPTION CACHE'NI TOZALASH
             global subscription_cache
@@ -3922,6 +3994,7 @@ def cleanup_invalid_channels():
                 del channels_db[channel_id]
             
             # Save changes
+            save_channels_to_file()  # Saqlash
             auto_save_data()
             logger.info(f"✅ Cleaned up {len(invalid_channels)} invalid channels")
             return len(invalid_channels)
@@ -4365,6 +4438,7 @@ def handle_channel_removal_confirmation(chat_id, user_id, channel_id, callback_i
         
         # Remove from memory first
         del channels_db[channel_id]
+        save_channels_to_file()  # Saqlash
         
         # KANAL O'CHIRILGANDA SUBSCRIPTION CACHE'NI TOZALASH
         global subscription_cache
@@ -5704,6 +5778,7 @@ def handle_accept_suggested_name(chat_id, user_id, callback_id):
         
         # Save to memory
         channels_db[str(channel_id)] = channel_data
+        save_channels_to_file()  # Saqlash
         
         # Save to MongoDB if available
         if is_mongodb_available():
