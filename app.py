@@ -1417,8 +1417,7 @@ def handle_callback_query(callback_query):
                     answer_callback_query(callback_id, "🎬 Kinolar ro'yxati")
                 else:
                     # Admin search functionality
-                    if user_id == ADMIN_ID:
-                        text = """🔍 <b>ADMIN QIDIRUV TIZIMI</b>
+                    text = """🔍 <b>ADMIN QIDIRUV TIZIMI</b>
 
 🎯 <b>Qidiruv usullari:</b>
 • Kino nomi bo'yicha
@@ -1427,21 +1426,21 @@ def handle_callback_query(callback_query):
 • Kod bo'yicha
 
 📝 <b>Qidiruv so'zini yuboring:</b>"""
-                        
-                        keyboard = {
-                            'inline_keyboard': [
-                                [
-                                    {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
-                                    {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
-                                ]
-                            ]
-                        }
                     
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '🎬 Barcha kinolar', 'callback_data': 'all_movies'},
+                                {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
+                            ]
+                        ]
+                    }
+                
                     send_message(chat_id, text, keyboard)
                     answer_callback_query(callback_id, "🔍 Admin qidiruv")
-                else:
-                    # Subscribed users - show simple search message
-                    text = """🎬 <b>Kino qidirish</b>
+            else:
+                # Subscribed users - show simple search message
+                text = """🎬 <b>Kino qidirish</b>
 
 📝 <b>Kino kodini to'g'ridan-to'g'ri yuboring:</b>
 • Masalan: <code>123</code>
@@ -1451,21 +1450,17 @@ def handle_callback_query(callback_query):
 @Eldorbek_Xakimxujayev
 
 🎭 <b>Ultimate Professional Kino Bot</b>"""
-                    
-                    keyboard = {
-                        'inline_keyboard': [
-                            [
-                                {'text': '🎬 Barcha Kinolar', 'callback_data': 'all_movies'},
-                                {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
-                            ],
-                            [
-                                {'text': '📞 Admin', 'url': 'https://t.me/Eldorbek_Xakimxujayev'}
-                            ]
+                
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🏠 Bosh sahifa', 'callback_data': 'back_to_start'}
                         ]
-                    }
-                    
-                    send_message(chat_id, text, keyboard)
-                    answer_callback_query(callback_id, "💡 Kino kodini yuboring")
+                    ]
+                }
+            
+                send_message(chat_id, text, keyboard)
+                answer_callback_query(callback_id, "🔍 Qidiruv")
         
         elif data == 'check_subscription':
             # Handle subscription check callback
