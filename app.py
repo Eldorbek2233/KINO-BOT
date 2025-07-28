@@ -1108,6 +1108,28 @@ def handle_message(message):
             except Exception as cleanup_error:
                 logger.error(f"❌ Cleanup command error: {cleanup_error}")
                 send_message(chat_id, f"❌ Cleanup error: {str(cleanup_error)}")
+        elif text == '/clearcache' and user_id == ADMIN_ID:
+            # Clear subscription cache command for admin
+            try:
+                global subscription_cache
+                cache_count = len(subscription_cache)
+                subscription_cache.clear()
+                
+                result_text = f"""🧹 <b>SUBSCRIPTION CACHE CLEARED</b>
+
+📊 <b>Results:</b>
+• Cached entries removed: <code>{cache_count}</code>
+• Cache status: <code>Empty</code>
+
+💡 <b>Next subscription checks will be fresh!</b>
+🔄 <b>All users will be re-verified on next access.</b>"""
+                
+                send_message(chat_id, result_text)
+                logger.info(f"✅ Admin {user_id} cleared subscription cache: {cache_count} entries removed")
+                
+            except Exception as cache_error:
+                logger.error(f"❌ Clear cache error: {cache_error}")
+                send_message(chat_id, f"❌ Cache clear error: {str(cache_error)}")
         elif text == '/addchannel' and user_id == ADMIN_ID:
             # Quick add channel command for admin
             text = """➕ <b>YANGI KANAL QO'SHISH</b>
@@ -2757,8 +2779,15 @@ def handle_help_admin(chat_id, user_id):
 💡 <b>Tezkor buyruqlar:</b>
 • <code>/admin</code> - Admin panel
 • <code>/stats</code> - Statistika
+• <code>/cleanup</code> - Nofaol kanallarni tozalash
+• <code>/clearcache</code> - Obuna cache'ini tozalash
 • Video yuborish - Avtomatik yuklash
 • Kino kodi - Kino qidirish
+
+🔧 <b>Debug buyruqlari:</b>
+• <code>/addchannel @username Nom</code> - Tezkor kanal qo'shish
+• <code>/clearcache</code> - Subscription cache tozalash
+• <code>/cleanup</code> - Nofaol kanallar tozalash
 
 📞 <b>Texnik yordam:</b>
 • GitHub: Eldorbek2233/KINO-BOT
@@ -3387,6 +3416,11 @@ def handle_add_channel_session(chat_id, message):
             channels_db[str(channel_id)] = channel_data
             logger.info(f"💾 Channel saved to memory: {channel_id} -> {channel_name}")
             
+            # YANGI KANAL QO'SHILGANDA SUBSCRIPTION CACHE'NI TOZALASH
+            global subscription_cache
+            subscription_cache.clear()
+            logger.info(f"🧹 Subscription cache cleared after adding new channel: {channel_name}")
+            
             # Save to MongoDB if available
             if is_mongodb_available():
                 try:
@@ -3940,11 +3974,16 @@ def check_all_subscriptions(user_id):
         
         logger.info(f"🔍 Checking user {user_id} subscription to {len(active_channels)} channels")
         
+        # Debug: Show channel details
+        for cid, cdata in active_channels.items():
+            logger.info(f"📺 Channel: {cid} - {cdata.get('name', 'Unknown')} - Active: {cdata.get('active', True)}")
+        
         subscribed_count = 0
         total_channels = len(active_channels)
         
         # Check each active channel with fast timeout
         for channel_id, channel_data in active_channels.items():
+            channel_name = channel_data.get('name', f'Channel {channel_id}')
             try:
                 # Fast API request with 3-second timeout
                 url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
@@ -3962,22 +4001,26 @@ def check_all_subscriptions(user_id):
                         # Check if user is subscribed
                         if status in ['member', 'administrator', 'creator']:
                             subscribed_count += 1
+                            logger.info(f"✅ User {user_id} subscribed to {channel_name} ({channel_id}) - Status: {status}")
                         elif status in ['left', 'kicked']:
-                            logger.info(f"❌ User {user_id} not subscribed to {channel_id}")
+                            logger.info(f"❌ User {user_id} not subscribed to {channel_name} ({channel_id}) - Status: {status}")
+                        else:
+                            logger.info(f"⚠️ User {user_id} unknown status in {channel_name} ({channel_id}) - Status: {status}")
                     else:
                         # API error - assume not subscribed
-                        logger.warning(f"⚠️ API error for channel {channel_id}: {result.get('description', 'Unknown')}")
+                        error_desc = result.get('description', 'Unknown')
+                        logger.warning(f"⚠️ API error for {channel_name} ({channel_id}): {error_desc}")
                         
                 elif response.status_code in [400, 403, 404]:
                     # Channel issues - skip this channel but don't grant access
-                    logger.warning(f"⚠️ Channel {channel_id} issue: HTTP {response.status_code}")
+                    logger.warning(f"⚠️ Channel {channel_name} ({channel_id}) issue: HTTP {response.status_code}")
                     
             except requests.exceptions.Timeout:
-                logger.warning(f"⏰ Timeout checking channel {channel_id}")
+                logger.warning(f"⏰ Timeout checking {channel_name} ({channel_id})")
                 # On timeout, assume not subscribed for security
                 
             except Exception as e:
-                logger.error(f"❌ Error checking channel {channel_id}: {e}")
+                logger.error(f"❌ Error checking {channel_name} ({channel_id}): {e}")
                 # On error, assume not subscribed for security
         
         # Determine if user is fully subscribed
@@ -4269,6 +4312,11 @@ def handle_channel_removal_confirmation(chat_id, user_id, channel_id, callback_i
         
         # Remove from memory first
         del channels_db[channel_id]
+        
+        # KANAL O'CHIRILGANDA SUBSCRIPTION CACHE'NI TOZALASH
+        global subscription_cache
+        subscription_cache.clear()
+        logger.info(f"🧹 Subscription cache cleared after removing channel: {channel_name}")
         
         # Remove from MongoDB if available
         mongodb_deleted = False
