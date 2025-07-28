@@ -1268,18 +1268,23 @@ def handle_start_command(chat_id, user_id, user_info):
                 ]
             }
         else:
-            # STEP 1: FAST SUBSCRIPTION CHECK FOR REGULAR USERS
-            if channels_db:  # Only check if channels exist
+            # STEP 1: MAJBURIY OBUNA TEKSHIRUVI - YANGI FOYDALANUVCHILAR UCHUN
+            if channels_db:  # Agar kanallar mavjud bo'lsa
+                logger.info(f"🔍 Checking subscription for user {user_id} on start command")
                 is_subscribed = check_all_subscriptions(user_id)
                 if not is_subscribed:
                     logger.info(f"❌ User {user_id} not subscribed - showing subscription message")
                     send_subscription_message(chat_id, user_id)
                     return
+                else:
+                    logger.info(f"✅ User {user_id} is subscribed - showing welcome message")
             
-            # Regular user start message - only shown if subscribed or no channels
+            # Faqat obuna bo'lgan foydalanuvchilarga ko'rsatiladigan xabar
             text = f"""🎭 <b>Ultimate Professional Kino Bot</b>
 
 👋 Salom {user_name}!
+
+✅ <b>Siz barcha kanallarga obuna bo'lgansiz!</b>
 
 🎬 <b>Kino qidirish:</b>
 • Kod yuboring: <code>123</code> yoki <code>#123</code>
