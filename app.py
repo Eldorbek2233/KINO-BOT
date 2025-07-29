@@ -556,7 +556,7 @@ def send_message(chat_id, text, keyboard=None):
         if keyboard:
             data['reply_markup'] = json.dumps(keyboard)
         
-        response = requests.post(url, data=data, timeout=15)
+        response = requests.post(url, data=data, timeout=5)  # 15 dan 5 ga qisqartirdik
         
         if response.status_code == 200:
             result = response.json()
@@ -588,7 +588,7 @@ def send_video(chat_id, video_file_id, caption="", keyboard=None):
         if keyboard:
             data['reply_markup'] = json.dumps(keyboard)
         
-        response = requests.post(url, data=data, timeout=30)
+        response = requests.post(url, data=data, timeout=10)  # 30 dan 10 ga qisqartirdik
         
         if response.status_code == 200:
             result = response.json()
@@ -620,7 +620,7 @@ def send_photo(chat_id, photo_file_id, caption="", keyboard=None):
         if keyboard:
             data['reply_markup'] = json.dumps(keyboard)
         
-        response = requests.post(url, data=data, timeout=20)
+        response = requests.post(url, data=data, timeout=8)  # 20 dan 8 ga qisqartirdik
         
         if response.status_code == 200:
             result = response.json()
@@ -648,7 +648,7 @@ def answer_callback_query(callback_id, text="", show_alert=False):
             'show_alert': show_alert
         }
         
-        response = requests.post(url, data=data, timeout=10)
+        response = requests.post(url, data=data, timeout=2)  # Callback uchun 2 sekund
         return response.status_code == 200
         
     except Exception as e:
@@ -676,7 +676,7 @@ def check_user_subscription(user_id, channel_id):
             'user_id': user_id
         }
         
-        response = requests.post(url, data=data, timeout=10)
+        response = requests.post(url, data=data, timeout=3)  # Subscription check uchun 3 sekund
         
         if response.status_code == 200:
             result = response.json()
@@ -945,36 +945,48 @@ def handle_message(message):
         
         logger.info(f"🔍 Processing message: chat_id={chat_id}, user_id={user_id}, text='{text[:50]}'")
         
-        # Save user
-        save_user(user_info, user_id)
+        # TEZKOR: Faqat yangi foydalanuvchilarni saqlash
+        if str(user_id) not in users_db:
+            save_user(user_info, user_id)
+            logger.info(f"👤 NEW user saved: {user_id}")
+        else:
+            # Mavjud foydalanuvchi - faqat last_seen yangilash
+            users_db[str(user_id)]['last_seen'] = datetime.now().isoformat()
         
         logger.info(f"💬 Message from {user_id}: {text[:50]}...")
         
-        # OPTIMIZED subscription check for non-admin users 
+        # ULTRA FAST subscription check - faqat kerakli bo'lganda
         if channels_db and user_id != ADMIN_ID:
             try:
-                # Skip subscription check for certain commands and inline callbacks
+                # Skip subscription check for most cases to improve speed
                 skip_check = (
-                    text in ['/help'] or  # Help command
-                    not text or  # Empty text (could be callback)
-                    text.startswith('/')  # Other commands might need access
+                    text in ['/start', '/help'] or  # Commands
+                    not text or  # Empty text (callbacks)
+                    text.startswith('/') or  # All commands
+                    text.startswith('#') or  # Movie codes
+                    text.isdigit()  # Movie codes
                 )
                 
-                if not skip_check:
-                    # Use optimized subscription check with caching
+                if skip_check:
+                    # YANGI: Cache dan tezkor tekshirish
+                    cached_result = subscription_cache.get(user_id)
+                    if cached_result and cached_result.get('expires', 0) > time.time():
+                        if not cached_result.get('is_subscribed', False):
+                            logger.info(f"🚫 FAST: Cached block for user {user_id}")
+                            send_subscription_message(chat_id, user_id)
+                            return
+                        else:
+                            logger.info(f"✅ FAST: Cached access for user {user_id}")
+                else:
+                    # Faqat maxsus hollarda to'liq tekshirish
                     if not check_all_subscriptions(user_id):
                         logger.info(f"🚫 Blocking user {user_id} - subscription required")
                         send_subscription_message(chat_id, user_id)
                         return
-                    else:
-                        logger.info(f"✅ User {user_id} has valid subscriptions - allowing access")
-                else:
-                    logger.info(f"ℹ️ Skipping subscription check for command: {text}")
                     
             except Exception as check_error:
-                logger.error(f"❌ Fatal subscription check error for user {user_id}: {check_error}")
-                # On fatal error, allow access to prevent blocking
-                logger.warning(f"⚠️ Allowing access due to subscription check error")
+                logger.error(f"❌ Subscription check error: {check_error}")
+                # Xatolik bo'lsa ruxsat berish
                 pass
         
         # Handle upload sessions
@@ -4106,15 +4118,15 @@ def check_all_subscriptions(user_id):
         subscribed_count = 0
         total_channels = len(active_channels)
         
-        # Check each active channel with fast timeout
+        # FAST CHECK: Birinchi muvaffaqiyatsizlikda to'xtatish
         for channel_id, channel_data in active_channels.items():
             channel_name = channel_data.get('name', f'Channel {channel_id}')
             try:
-                # Fast API request with 3-second timeout
+                # Ultra fast API request with 2-second timeout
                 url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
                 payload = {'chat_id': channel_id, 'user_id': user_id}
                 
-                response = requests.post(url, json=payload, timeout=3)
+                response = requests.post(url, json=payload, timeout=2)
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -4126,32 +4138,79 @@ def check_all_subscriptions(user_id):
                         # Check if user is subscribed
                         if status in ['member', 'administrator', 'creator']:
                             subscribed_count += 1
-                            logger.info(f"✅ User {user_id} subscribed to {channel_name} ({channel_id}) - Status: {status}")
-                        elif status in ['left', 'kicked']:
-                            logger.info(f"❌ User {user_id} not subscribed to {channel_name} ({channel_id}) - Status: {status}")
+                            logger.info(f"✅ User {user_id} subscribed to {channel_name}")
                         else:
-                            logger.info(f"⚠️ User {user_id} unknown status in {channel_name} ({channel_id}) - Status: {status}")
+                            # Birinchi muvaffaqiyatsizlikda to'xtatish - TEZLIK
+                            logger.info(f"❌ FAST: User {user_id} not subscribed to {channel_name} - STOPPING CHECK")
+                            
+                            # Cache negative result immediately
+                            subscription_cache[user_id] = {
+                                'last_check': current_time,
+                                'is_subscribed': False,
+                                'expires': current_time + CACHE_DURATION,
+                                'subscribed_count': subscribed_count,
+                                'total_channels': total_channels
+                            }
+                            
+                            return False  # TEZKOR CHIQISH
                     else:
-                        # API error - assume not subscribed
-                        error_desc = result.get('description', 'Unknown')
-                        logger.warning(f"⚠️ API error for {channel_name} ({channel_id}): {error_desc}")
+                        # API error - assume not subscribed and stop
+                        logger.warning(f"⚠️ FAST: API error for {channel_name} - STOPPING CHECK")
+                        
+                        subscription_cache[user_id] = {
+                            'last_check': current_time,
+                            'is_subscribed': False,
+                            'expires': current_time + CACHE_DURATION,
+                            'subscribed_count': subscribed_count,
+                            'total_channels': total_channels
+                        }
+                        
+                        return False  # TEZKOR CHIQISH
                         
                 elif response.status_code in [400, 403, 404]:
-                    # Channel issues - skip this channel but don't grant access
-                    logger.warning(f"⚠️ Channel {channel_name} ({channel_id}) issue: HTTP {response.status_code}")
+                    # Channel issues - assume not subscribed and stop
+                    logger.warning(f"⚠️ FAST: Channel {channel_name} issue HTTP {response.status_code} - STOPPING")
+                    
+                    subscription_cache[user_id] = {
+                        'last_check': current_time,
+                        'is_subscribed': False,
+                        'expires': current_time + CACHE_DURATION,
+                        'subscribed_count': subscribed_count,
+                        'total_channels': total_channels
+                    }
+                    
+                    return False  # TEZKOR CHIQISH
                     
             except requests.exceptions.Timeout:
-                logger.warning(f"⏰ Timeout checking {channel_name} ({channel_id})")
-                # On timeout, assume not subscribed for security
+                logger.warning(f"⏰ FAST: Timeout for {channel_name} - STOPPING CHECK")
+                
+                subscription_cache[user_id] = {
+                    'last_check': current_time,
+                    'is_subscribed': False,
+                    'expires': current_time + CACHE_DURATION,
+                    'subscribed_count': subscribed_count,
+                    'total_channels': total_channels
+                }
+                
+                return False  # TEZKOR CHIQISH
                 
             except Exception as e:
-                logger.error(f"❌ Error checking {channel_name} ({channel_id}): {e}")
-                # On error, assume not subscribed for security
+                logger.error(f"❌ FAST: Error checking {channel_name}: {e} - STOPPING CHECK")
+                
+                subscription_cache[user_id] = {
+                    'last_check': current_time,
+                    'is_subscribed': False,
+                    'expires': current_time + CACHE_DURATION,
+                    'subscribed_count': subscribed_count,
+                    'total_channels': total_channels
+                }
+                
+                return False  # TEZKOR CHIQISH
         
-        # Determine if user is fully subscribed
+        # Agar barcha kanallarga obuna bo'lgan bo'lsa
         is_fully_subscribed = (subscribed_count == total_channels)
         
-        # Cache the result for 5 minutes
+        # Cache positive result
         subscription_cache[user_id] = {
             'last_check': current_time,
             'is_subscribed': is_fully_subscribed,
@@ -4160,12 +4219,8 @@ def check_all_subscriptions(user_id):
             'total_channels': total_channels
         }
         
-        if is_fully_subscribed:
-            logger.info(f"✅ User {user_id} subscribed to ALL {total_channels} channels")
-        else:
-            logger.info(f"❌ User {user_id} subscribed to {subscribed_count}/{total_channels} channels")
-        
-        return is_fully_subscribed
+        logger.info(f"✅ FAST: User {user_id} subscribed to ALL {total_channels} channels")
+        return True
         
     except Exception as e:
         logger.error(f"❌ Subscription check critical error for user {user_id}: {e}")
