@@ -1220,6 +1220,61 @@ def handle_message(message):
             except Exception as test_error:
                 logger.error(f"❌ Test user error: {test_error}")
                 send_message(chat_id, f"❌ Test error: {str(test_error)}")
+        elif text == '/debugchannels' and user_id == ADMIN_ID:
+            # Debug channels command - show detailed channel information
+            try:
+                debug_text = f"""🔍 <b>DEBUG: KANALLAR MA'LUMOTLARI</b>
+
+📊 <b>Umumiy ma'lumotlar:</b>
+• channels_db o'lchami: <code>{len(channels_db)}</code>
+• MongoDB holati: <code>{"✅ Ulanish faol" if is_mongodb_available() else "❌ Ulanish yo'q"}</code>
+• Cache holati: <code>{len(subscription_cache)} foydalanuvchi</code>
+
+📺 <b>Kanallar ro'yxati:</b>
+"""
+                
+                if not channels_db:
+                    debug_text += "❌ <b>Hech qanday kanal topilmadi!</b>\n\n"
+                else:
+                    channel_num = 1
+                    for channel_id, channel_data in channels_db.items():
+                        name = channel_data.get('name', 'Unknown')
+                        active = channel_data.get('active', True)
+                        username = channel_data.get('username', 'N/A')
+                        
+                        debug_text += f"""<b>{channel_num}. {name}</b>
+🆔 ID: <code>{channel_id}</code> (type: {type(channel_id).__name__})
+👤 Username: <code>{username}</code>
+🔄 Faol: {"✅" if active else "❌"}
+
+"""
+                        channel_num += 1
+                
+                debug_text += f"""
+🧪 <b>Test ma'lumotlari:</b>
+• Faol kanallar: <code>{len([c for c in channels_db.values() if c.get('active', True)])}</code>
+• Nofaol kanallar: <code>{len([c for c in channels_db.values() if not c.get('active', True)])}</code>
+
+💡 <b>Keyingi qadam:</b> /testsubscription yoki /clearcache"""
+                
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🧪 Test Obuna', 'callback_data': 'test_subscription'},
+                            {'text': '🧹 Cache Tozalash', 'callback_data': 'clear_cache'}
+                        ],
+                        [
+                            {'text': '📺 Kanallar Menu', 'callback_data': 'channels_admin'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, debug_text, keyboard)
+                logger.info(f"✅ Admin {user_id} viewed debug channels info")
+                
+            except Exception as debug_error:
+                logger.error(f"❌ Debug channels error: {debug_error}")
+                send_message(chat_id, f"❌ Debug xatolik: {str(debug_error)}")
         elif text == '/listchannels' and user_id == ADMIN_ID:
             # List all channels with detailed info for debugging
             try:
@@ -1258,6 +1313,67 @@ def handle_message(message):
             except Exception as list_error:
                 logger.error(f"❌ List channels error: {list_error}")
                 send_message(chat_id, f"❌ Kanallar ro'yxatini ko'rsatishda xatolik: {str(list_error)}")
+        elif text == '/refreshchannels' and user_id == ADMIN_ID:
+            # Force refresh channels from MongoDB and save to files
+            try:
+                old_count = len(channels_db)
+                
+                # Clear current channels
+                channels_db.clear()
+                logger.info("🧹 Cleared local channels_db")
+                
+                # Reload from MongoDB if available
+                if is_mongodb_available():
+                    try:
+                        mongodb_channels = mongo_db.channels.find({'active': True})
+                        for channel in mongodb_channels:
+                            channel_id = str(channel.get('channel_id', ''))
+                            if channel_id:
+                                channels_db[channel_id] = {
+                                    'channel_id': channel_id,
+                                    'name': channel.get('name', 'Unknown'),
+                                    'username': channel.get('username', ''),
+                                    'url': channel.get('url', ''),
+                                    'add_date': channel.get('add_date', datetime.now().isoformat()),
+                                    'active': channel.get('active', True),
+                                    'added_by': channel.get('added_by', ADMIN_ID)
+                                }
+                        logger.info(f"💾 Loaded {len(channels_db)} channels from MongoDB")
+                    except Exception as mongo_err:
+                        logger.error(f"❌ MongoDB refresh error: {mongo_err}")
+                
+                # Force save to files
+                save_channels_to_file()
+                
+                # Clear all subscription cache
+                invalidate_subscription_cache()
+                
+                result_text = f"""🔄 <b>KANALLAR YANGILANDI</b>
+
+📊 <b>Natija:</b>
+• Oldingi kanallar: <code>{old_count}</code> ta
+• Yangi kanallar: <code>{len(channels_db)}</code> ta
+• MongoDB dan yuklandi: {"✅" if is_mongodb_available() else "❌"}
+• Fayllarga saqlandi: ✅
+• Cache tozalandi: ✅
+
+🎯 <b>Barcha foydalanuvchilar qayta tekshiriladi!</b>"""
+
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🔍 Debug Ma\'lumotlar', 'callback_data': 'debug_channels'},
+                            {'text': '🧪 Test Obuna', 'callback_data': 'test_subscription'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, result_text, keyboard)
+                logger.info(f"✅ Admin {user_id} refreshed channels: {old_count} -> {len(channels_db)}")
+                
+            except Exception as refresh_error:
+                logger.error(f"❌ Refresh channels error: {refresh_error}")
+                send_message(chat_id, f"❌ Kanallarni yangilashda xatolik: {str(refresh_error)}")
         elif text == '/addchannel' and user_id == ADMIN_ID:
             # Quick add channel command for admin
             text = """➕ <b>YANGI KANAL QO'SHISH</b>
@@ -4119,7 +4235,7 @@ def handle_cleanup_channels(chat_id, user_id):
 
 def check_all_subscriptions(user_id):
     """
-    🔧 FIXED SUBSCRIPTION SYSTEM - Haqiqiy multi-channel support
+    🔧 FIXED SUBSCRIPTION SYSTEM - Haqiqiy multi-channel support + DEBUG
     Barcha kanallarga obuna tekshiruvi - to'g'ri cache va API bilan
     """
     try:
@@ -4127,6 +4243,11 @@ def check_all_subscriptions(user_id):
         if not channels_db:
             logger.info(f"ℹ️ No channels configured - user {user_id} gets immediate access")
             return True
+        
+        # 🔍 DEBUG: Show current channels in memory
+        logger.info(f"🔍 DEBUG: channels_db contents: {list(channels_db.keys())}")
+        for cid, cdata in channels_db.items():
+            logger.info(f"🔍 DEBUG: Channel {cid} = {cdata.get('name', 'Unknown')} (active: {cdata.get('active', True)})")
         
         # Check cache first for performance (5 minute cache)
         current_time = time.time()
@@ -4157,12 +4278,28 @@ def check_all_subscriptions(user_id):
         # 🎯 HAQIQIY TEKSHIRISH: Barcha kanallarni tekshiramiz
         for channel_id, channel_data in active_channels.items():
             channel_name = channel_data.get('name', f'Channel {channel_id}')
+            
+            # 🔍 DEBUG: Show what we're checking
+            logger.info(f"🔍 DEBUG: Checking channel_id='{channel_id}' (type: {type(channel_id)}) name='{channel_name}'")
+            
             try:
+                # 🔧 FIX: Ensure channel_id is proper format for API
+                api_channel_id = channel_id
+                if isinstance(channel_id, str):
+                    # Try to convert to int if it's a numeric string
+                    if channel_id.lstrip('-').isdigit():
+                        api_channel_id = int(channel_id)
+                    # Keep as string if it's a username (@channel)
+                    elif channel_id.startswith('@'):
+                        api_channel_id = channel_id
+                
+                logger.info(f"🔍 DEBUG: Using API channel_id='{api_channel_id}' (type: {type(api_channel_id)})")
+                
                 # API request with proper error handling
                 url = f"https://api.telegram.org/bot{TOKEN}/getChatMember" 
-                data = {'chat_id': channel_id, 'user_id': user_id}
+                data = {'chat_id': api_channel_id, 'user_id': user_id}
                 
-                response = requests.post(url, data=data, timeout=3)
+                response = requests.post(url, data=data, timeout=5)  # Increased timeout for debugging
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -4170,6 +4307,9 @@ def check_all_subscriptions(user_id):
                     if result.get('ok'):
                         member_info = result.get('result', {})
                         status = member_info.get('status', '')
+                        
+                        # 🔍 DEBUG: Show API response
+                        logger.info(f"🔍 DEBUG: API response for '{channel_name}': status='{status}'")
                         
                         # ✅ Check if user is properly subscribed
                         if status in ['member', 'administrator', 'creator']:
@@ -4185,7 +4325,7 @@ def check_all_subscriptions(user_id):
                         
                 else:
                     failed_channels.append(channel_name)
-                    logger.warning(f"⚠️ HTTP {response.status_code} for '{channel_name}'")
+                    logger.warning(f"⚠️ HTTP {response.status_code} for '{channel_name}': {response.text[:200]}")
                     
             except requests.exceptions.Timeout:
                 failed_channels.append(channel_name)
