@@ -656,20 +656,8 @@ def answer_callback_query(callback_id, text="", show_alert=False):
         return False
 
 def check_user_subscription(user_id, channel_id):
-    """Check if user is subscribed to channel"""
+    """Check if user is subscribed to channel - STRICT CHECK"""
     try:
-        # EMERGENCY BYPASS: Skip problematic channels
-        problematic_channels = ['@soglomxayot_ersag', '-1002047665778']
-        if str(channel_id) in problematic_channels or channel_id in problematic_channels:
-            logger.warning(f"🚨 EMERGENCY: Skipping problematic channel {channel_id}")
-            return True
-        
-        # EMERGENCY: Check if emergency bypass is activated
-        emergency_bypass = os.getenv('EMERGENCY_BYPASS', 'true').lower() == 'true'
-        if emergency_bypass:
-            logger.info(f"🚨 EMERGENCY BYPASS: User {user_id} granted access to {channel_id}")
-            return True
-        
         url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
         data = {
             'chat_id': channel_id,
@@ -684,32 +672,20 @@ def check_user_subscription(user_id, channel_id):
                 member = result.get('result', {})
                 status = member.get('status', '')
                 return status in ['member', 'administrator', 'creator']
-        elif response.status_code in [400, 403]:
-            logger.warning(f"🚨 EMERGENCY: HTTP {response.status_code} for channel {channel_id} - GRANTING ACCESS")
-            return True
-        
-        return False
+            else:
+                logger.warning(f"⚠️ API error for channel {channel_id}: {result.get('description', 'Unknown')}")
+                return False
+        else:
+            logger.warning(f"⚠️ HTTP {response.status_code} for channel {channel_id}")
+            return False
         
     except Exception as e:
         logger.error(f"❌ Subscription check error: {e}")
-        # EMERGENCY: Grant access on errors to prevent lockout
-        return True
+        return False
 
 def check_user_subscription_fast(user_id, channel_id):
-    """Ultra fast subscription check with 2-second timeout"""
+    """Ultra fast subscription check with 2-second timeout - STRICT"""
     try:
-        # EMERGENCY BYPASS: Skip problematic channels
-        problematic_channels = ['@soglomxayot_ersag', '-1002047665778']
-        if str(channel_id) in problematic_channels or channel_id in problematic_channels:
-            logger.warning(f"🚨 EMERGENCY: Skipping problematic channel {channel_id}")
-            return True
-        
-        # EMERGENCY: Check if emergency bypass is activated
-        emergency_bypass = os.getenv('EMERGENCY_BYPASS', 'true').lower() == 'true'
-        if emergency_bypass:
-            logger.info(f"🚨 EMERGENCY BYPASS: User {user_id} granted access to {channel_id}")
-            return True
-        
         url = f"https://api.telegram.org/bot{TOKEN}/getChatMember"
         data = {
             'chat_id': channel_id,
@@ -730,27 +706,25 @@ def check_user_subscription_fast(user_id, channel_id):
                 
                 # Quick rejection for definitely not subscribed
                 if status in ['left', 'kicked']:
+                    logger.info(f"❌ Fast: User {user_id} definitely not subscribed to {channel_id} - Status: {status}")
                     return False
                 
                 return is_subscribed
             else:
                 # Fast error handling
                 error_desc = result.get('description', '')
-                if 'user not found' in error_desc.lower() or 'chat not found' in error_desc.lower():
-                    return False
+                logger.warning(f"⚠️ Fast API error for {channel_id}: {error_desc}")
                 return False
-        elif response.status_code in [400, 403]:
-            logger.warning(f"🚨 EMERGENCY: HTTP {response.status_code} for channel {channel_id} - GRANTING ACCESS")
-            return True
         else:
+            logger.warning(f"⚠️ Fast HTTP {response.status_code} for channel {channel_id}")
             return False
         
     except requests.exceptions.Timeout:
-        logger.warning(f"⏰ Fast timeout for channel {channel_id} - GRANTING ACCESS")
-        return True
+        logger.warning(f"⏰ Fast timeout for channel {channel_id}")
+        return False
     except Exception as e:
-        logger.error(f"❌ Ultra fast check error for {channel_id}: {e} - GRANTING ACCESS")
-        return True
+        logger.error(f"❌ Ultra fast check error for {channel_id}: {e}")
+        return False
 
 # User Management
 def save_user(user_info, user_id):
@@ -955,39 +929,35 @@ def handle_message(message):
         
         logger.info(f"💬 Message from {user_id}: {text[:50]}...")
         
-        # ULTRA FAST subscription check - faqat kerakli bo'lganda
+        # ULTRA FAST subscription check - HAMMA XABARLAR UCHUN MAJBURIY
         if channels_db and user_id != ADMIN_ID:
             try:
-                # Skip subscription check for most cases to improve speed
-                skip_check = (
-                    text in ['/start', '/help'] or  # Commands
-                    not text or  # Empty text (callbacks)
-                    text.startswith('/') or  # All commands
-                    text.startswith('#') or  # Movie codes
-                    text.isdigit()  # Movie codes
-                )
+                # MAJBURIY AZOLIK - faqat admin bypass
+                logger.info(f"🔍 MANDATORY: Checking subscription for user {user_id}")
                 
-                if skip_check:
-                    # YANGI: Cache dan tezkor tekshirish
-                    cached_result = subscription_cache.get(user_id)
-                    if cached_result and cached_result.get('expires', 0) > time.time():
-                        if not cached_result.get('is_subscribed', False):
-                            logger.info(f"🚫 FAST: Cached block for user {user_id}")
-                            send_subscription_message(chat_id, user_id)
-                            return
-                        else:
-                            logger.info(f"✅ FAST: Cached access for user {user_id}")
-                else:
-                    # Faqat maxsus hollarda to'liq tekshirish
-                    if not check_all_subscriptions(user_id):
-                        logger.info(f"🚫 Blocking user {user_id} - subscription required")
+                # Cache dan tezkor tekshirish
+                cached_result = subscription_cache.get(user_id)
+                if cached_result and cached_result.get('expires', 0) > time.time():
+                    if not cached_result.get('is_subscribed', False):
+                        logger.info(f"🚫 MANDATORY: Cached block for user {user_id}")
                         send_subscription_message(chat_id, user_id)
                         return
+                    else:
+                        logger.info(f"✅ MANDATORY: Cached access for user {user_id}")
+                else:
+                    # To'liq tekshirish - cache yo'q yoki expired
+                    if not check_all_subscriptions(user_id):
+                        logger.info(f"🚫 MANDATORY: Blocking user {user_id} - subscription required")
+                        send_subscription_message(chat_id, user_id)
+                        return
+                    else:
+                        logger.info(f"✅ MANDATORY: User {user_id} verified - access granted")
                     
             except Exception as check_error:
                 logger.error(f"❌ Subscription check error: {check_error}")
-                # Xatolik bo'lsa ruxsat berish
-                pass
+                # Xatolik bo'lsa ham majburiy azolik tekshiruvidan o'tishi kerak
+                send_subscription_message(chat_id, user_id) 
+                return
         
         # Handle upload sessions
         if user_id == ADMIN_ID and user_id in upload_sessions:
@@ -1469,6 +1439,38 @@ def handle_callback_query(callback_query):
         answer_callback_query(callback_id)
         
         logger.info(f"🔘 Callback: {data} from {user_id}")
+        
+        # MAJBURIY AZOLIK TEKSHIRUVI - callback uchun ham
+        if channels_db and user_id != ADMIN_ID:
+            # Maxsus callback lar uchun skip qilish
+            skip_callbacks = ['check_subscription', 'refresh_subscription']
+            
+            if data not in skip_callbacks:
+                try:
+                    logger.info(f"🔍 CALLBACK: Checking subscription for user {user_id}")
+                    
+                    # Cache dan tekshirish
+                    cached_result = subscription_cache.get(user_id)
+                    if cached_result and cached_result.get('expires', 0) > time.time():
+                        if not cached_result.get('is_subscribed', False):
+                            logger.info(f"🚫 CALLBACK: Cached block for user {user_id}")
+                            send_subscription_message(chat_id, user_id)
+                            return
+                        else:
+                            logger.info(f"✅ CALLBACK: Cached access for user {user_id}")
+                    else:
+                        # To'liq tekshirish
+                        if not check_all_subscriptions(user_id):
+                            logger.info(f"🚫 CALLBACK: Blocking user {user_id} - subscription required")
+                            send_subscription_message(chat_id, user_id)
+                            return
+                        else:
+                            logger.info(f"✅ CALLBACK: User {user_id} verified - callback allowed")
+                            
+                except Exception as check_error:
+                    logger.error(f"❌ Callback subscription check error: {check_error}")
+                    send_subscription_message(chat_id, user_id)
+                    return
         
         # Route callbacks
         if data == 'admin_main':
