@@ -125,7 +125,7 @@ broadcast_sessions = {}
 
 # Performance optimization: subscription cache
 subscription_cache = {}  # user_id: {'last_check': timestamp, 'is_subscribed': bool, 'expires': timestamp}
-CACHE_DURATION = 300  # 5 minutes cache
+CACHE_DURATION = 60  # 🔧 REDUCED: 1 minute cache for real-time subscription detection
 
 # SUBSCRIPTION SYSTEM IS NOW ACTIVE
 def initialize_subscription_system():
@@ -1220,6 +1220,71 @@ def handle_message(message):
             except Exception as test_error:
                 logger.error(f"❌ Test user error: {test_error}")
                 send_message(chat_id, f"❌ Test error: {str(test_error)}")
+        elif text == '/testnow' and user_id == ADMIN_ID:
+            # Real-time subscription test without cache - immediate check
+            try:
+                logger.info(f"🧪 Admin {user_id} performing REAL-TIME subscription test")
+                
+                # Get a test user ID (admin + 1000 to avoid conflicts)
+                test_user_id = user_id + 1000
+                
+                # Force clear any cache for test user
+                if test_user_id in subscription_cache:
+                    del subscription_cache[test_user_id]
+                
+                # Perform immediate check without cache
+                result_text = f"""🧪 <b>REAL-TIME TEST NATIJALARI</b>
+
+🔍 <b>Test foydalanuvchi ID:</b> <code>{test_user_id}</code>
+
+📊 <b>Test natijasi:</b>
+"""
+                
+                if channels_db:
+                    # Immediate check
+                    is_subscribed = check_all_subscriptions(test_user_id)
+                    
+                    # Get detailed results from cache
+                    cache_data = subscription_cache.get(test_user_id, {})
+                    subscribed_count = cache_data.get('subscribed_count', 0)
+                    total_channels = cache_data.get('total_channels', len(channels_db))
+                    failed_channels = cache_data.get('failed_channels', [])
+                    
+                    if is_subscribed:
+                        result_text += f"✅ <b>RUXSAT BERILDI</b> - Barcha kanallarga obuna"
+                    else:
+                        result_text += f"❌ <b>RUXSAT RAD ETILDI</b> - {subscribed_count}/{total_channels} kanalga obuna"
+                        
+                        if failed_channels:
+                            result_text += f"\n\n❌ <b>Obuna bo'lmagan kanallar:</b>\n"
+                            for i, failed_channel in enumerate(failed_channels[:5], 1):
+                                result_text += f"{i}. {failed_channel}\n"
+                else:
+                    result_text += "ℹ️ <b>Kanallar yo'q</b> - Ruxsat berildi"
+                
+                result_text += f"""
+
+⏱ <b>Cache ma'lumotlari:</b>
+• Cache holati: {"✅ Yangi yaratildi" if test_user_id in subscription_cache else "❌ Yo'q"}
+• Cache muddati: {"30s (ijobiy)" if is_subscribed else "60s (salbiy)"}
+
+💡 <b>Bu oddiy foydalanuvchilar tajribasini ko'rsatadi</b>"""
+
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🔄 Qayta Test', 'callback_data': 'realtime_test'},
+                            {'text': '🧹 Cache Tozalash', 'callback_data': 'clear_test_cache'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, result_text, keyboard)
+                logger.info(f"✅ Admin {user_id} completed real-time test: {'ALLOWED' if is_subscribed else 'BLOCKED'}")
+                
+            except Exception as test_error:
+                logger.error(f"❌ Real-time test error: {test_error}")
+                send_message(chat_id, f"❌ Real-time test xatolik: {str(test_error)}")
         elif text == '/debugchannels' and user_id == ADMIN_ID:
             # Debug channels command - show detailed channel information
             try:
@@ -4235,8 +4300,8 @@ def handle_cleanup_channels(chat_id, user_id):
 
 def check_all_subscriptions(user_id):
     """
-    🔧 FIXED SUBSCRIPTION SYSTEM - Haqiqiy multi-channel support + DEBUG
-    Barcha kanallarga obuna tekshiruvi - to'g'ri cache va API bilan
+    🔧 REAL-TIME SUBSCRIPTION SYSTEM - Tezkor obuna tekshiruvi
+    Barcha kanallarga obuna tekshiruvi - real-time detection bilan
     """
     try:
         # Skip if no channels configured
@@ -4249,14 +4314,21 @@ def check_all_subscriptions(user_id):
         for cid, cdata in channels_db.items():
             logger.info(f"🔍 DEBUG: Channel {cid} = {cdata.get('name', 'Unknown')} (active: {cdata.get('active', True)})")
         
-        # Check cache first for performance (5 minute cache)
+        # 🎯 SMART CACHE: Kamroq cache, ko'proq real-time checking
         current_time = time.time()
         if user_id in subscription_cache:
             cache_data = subscription_cache[user_id]
             if current_time < cache_data.get('expires', 0):
                 result = cache_data['is_subscribed']
-                logger.info(f"⚡ Cached result for user {user_id}: {result} (expires in {int(cache_data['expires'] - current_time)}s)")
-                return result
+                cache_age = current_time - cache_data.get('last_check', 0)
+                
+                # 🔧 AGGRESSIVE: Positive cache uchun qisqaroq muddat
+                if result and cache_age > 30:  # Positive result 30 sekund atrofida qayta tekshiriladi
+                    logger.info(f"🔄 Positive cache expired early for user {user_id} - forcing recheck")
+                    del subscription_cache[user_id]
+                else:
+                    logger.info(f"⚡ Cached result for user {user_id}: {result} (expires in {int(cache_data['expires'] - current_time)}s)")
+                    return result
             else:
                 # Cache expired, remove it
                 del subscription_cache[user_id]
@@ -4269,7 +4341,7 @@ def check_all_subscriptions(user_id):
             logger.info(f"ℹ️ No active channels - user {user_id} gets immediate access")
             return True
         
-        logger.info(f"🔍 CHECKING user {user_id} subscription to {len(active_channels)} channels")
+        logger.info(f"🔍 REAL-TIME CHECK: user {user_id} subscription to {len(active_channels)} channels")
         
         subscribed_count = 0
         total_channels = len(active_channels)
@@ -4299,7 +4371,7 @@ def check_all_subscriptions(user_id):
                 url = f"https://api.telegram.org/bot{TOKEN}/getChatMember" 
                 data = {'chat_id': api_channel_id, 'user_id': user_id}
                 
-                response = requests.post(url, data=data, timeout=5)  # Increased timeout for debugging
+                response = requests.post(url, data=data, timeout=4)  # Slightly longer timeout for accurate results
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -4338,21 +4410,24 @@ def check_all_subscriptions(user_id):
         # 🎯 NATIJA: Barcha kanallarga obuna bo'lgan bo'lishi kerak
         is_fully_subscribed = (subscribed_count == total_channels)
         
+        # 🔧 SMART CACHE: Manfiy natijalarga uzunroq cache, ijobiy natijalarga qisqaroq
+        cache_duration = CACHE_DURATION if not is_fully_subscribed else 30  # Negative: 60s, Positive: 30s
+        
         # Cache result (positive or negative)
         subscription_cache[user_id] = {
             'last_check': current_time,
             'is_subscribed': is_fully_subscribed,
-            'expires': current_time + CACHE_DURATION,
+            'expires': current_time + cache_duration,
             'subscribed_count': subscribed_count,
             'total_channels': total_channels,
             'failed_channels': failed_channels
         }
         
         if is_fully_subscribed:
-            logger.info(f"✅ SUCCESS: User {user_id} subscribed to ALL {total_channels} channels")
+            logger.info(f"✅ SUCCESS: User {user_id} subscribed to ALL {total_channels} channels (cached for {cache_duration}s)")
             return True
         else:
-            logger.info(f"❌ FAILED: User {user_id} subscribed to {subscribed_count}/{total_channels} channels. Failed: {failed_channels}")
+            logger.info(f"❌ FAILED: User {user_id} subscribed to {subscribed_count}/{total_channels} channels. Failed: {failed_channels} (cached for {cache_duration}s)")
             return False
         
     except Exception as e:
