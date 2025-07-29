@@ -1156,7 +1156,6 @@ def handle_message(message):
         elif text == '/clearcache' and user_id == ADMIN_ID:
             # Clear subscription cache command for admin
             try:
-                global subscription_cache
                 cache_count = len(subscription_cache)
                 subscription_cache.clear()
                 
