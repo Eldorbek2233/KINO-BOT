@@ -2657,11 +2657,11 @@ def handle_admin_panel(chat_id, user_id):
                 ],
                 [
                     {'text': '📊 Batafsil Statistika', 'callback_data': 'stats_detailed'},
-                    {'text': '�️ Spam Himoya', 'callback_data': 'spam_protection_log'}
+                    {'text': '🛡️ Spam Himoya', 'callback_data': 'spam_protection_log'}
                 ],
                 [
-                    {'text': '� Tizim Sozlamalari', 'callback_data': 'system_admin'},
-                    {'text': '� Ma\'lumotlar', 'callback_data': 'data_admin'}
+                    {'text': '⚙️ Tizim Sozlamalari', 'callback_data': 'system_admin'},
+                    {'text': '💾 Ma\'lumotlar', 'callback_data': 'data_admin'}
                 ],
                 [
                     {'text': '🔄 Yangilash', 'callback_data': 'admin_main'},
