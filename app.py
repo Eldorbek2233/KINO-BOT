@@ -1510,13 +1510,20 @@ def handle_message(message):
                     status = "🚫 BLOCKED" if is_spam_result else "✅ ALLOWED"
                     results.append(f"{i}. {status}\n   <code>{test_text[:50]}</code>")
                 
+                # Count blocked results
+                blocked_emoji = '🚫'
+                blocked_results = [r for r in results if blocked_emoji in r]
+                working_emoji = '✅'
+                not_working_emoji = '❌'
+                newline_char = '\n'
+                
                 result_text = f"""🧪 <b>REAL SPAM TEST RESULTS</b>
 
-{''.join(f'{r}\n' for r in results)}
+{''.join(f'{r}{newline_char}' for r in results)}
 
 🎯 <b>Expected:</b> 1-3,6 should be BLOCKED, 4-5 should be ALLOWED
 
-📊 <b>Current Protection Status:</b> {'✅ Working' if len([r for r in results if '🚫' in r]) >= 3 else '❌ Not Working Properly'}"""
+📊 <b>Current Protection Status:</b> {working_emoji + ' Working' if len(blocked_results) >= 3 else not_working_emoji + ' Not Working Properly'}"""
 
                 send_message(chat_id, result_text)
                 
