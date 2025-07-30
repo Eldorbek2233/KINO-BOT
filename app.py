@@ -976,7 +976,10 @@ def is_spam_message(message):
             'connect your wallet', 'verify and boom', 'watch your balance grow',
             'no registration', 'absolutely free', 'stacking eth', 'click, connect, collect',
             'claim ethereum', 'free btc', 'free money', 'get rich quick',
-            'investment opportunity', 'limited airdrop', 'won\'t last forever'
+            'investment opportunity', 'limited airdrop', 'won\'t last forever',
+            'ethereum', 'btc', 'bitcoin', 'crypto', 'airdrop', 'claim', 'free',
+            'wallet', 'blockchain', 'mining', 'token', '.net', 'click here',
+            'register now', 'hurry up', 'don\'t miss', 'last chance'
         ]
         
         # 🚫 TELEGRAM SPAM PATTERNS - Block common Telegram spam
@@ -992,8 +995,15 @@ def is_spam_message(message):
         suspicious_urls = [
             'bit.ly', 'tinyurl.com', 'short.link', 'cutt.ly', 't.co',
             'freeether.net', 'freecrypto', 'cryptoairdrop', 'earnfree',
-            'getfreeeth', 'claimeth', 'freebitcoin', 'earnbtc'
+            'getfreeeth', 'claimeth', 'freebitcoin', 'earnbtc',
+            '.tk', '.ml', '.ga', '.cf', 'telegra.ph', 'rebrand.ly',
+            'ow.ly', 'is.gd', 'buff.ly', 'shr.lc', 'tiny.cc'
         ]
+        
+        # 🚫 Check for any URLs in the message (more aggressive)
+        import re
+        url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+        has_url = re.search(url_pattern, text)
         
         # 🚫 FORWARDED SPAM - Check if message is forwarded
         is_forwarded = 'forward_from' in message or 'forward_from_chat' in message
@@ -1002,39 +1012,46 @@ def is_spam_message(message):
         spam_reason = ""
         
         # 🔍 CHECK CRYPTO SPAM
-        if any(keyword in text for keyword in crypto_spam_keywords):
-            spam_detected = True
-            spam_reason = "Crypto scam keywords"
-        
-        # 🔍 CHECK TELEGRAM SPAM
-        elif any(pattern in text for pattern in telegram_spam_patterns):
-            spam_detected = True
-            spam_reason = "Telegram spam patterns"
+        for keyword in crypto_spam_keywords:
+            if keyword in text:
+                spam_detected = True
+                spam_reason = f"Crypto keyword: '{keyword}'"
+                break
         
         # 🔍 CHECK SUSPICIOUS URLS
-        elif any(url in text for url in suspicious_urls):
+        if not spam_detected and (has_url or any(url in text for url in suspicious_urls)):
             spam_detected = True
-            spam_reason = "Suspicious URLs"
+            spam_reason = "Contains suspicious URL"
+        
+        # 🔍 CHECK TELEGRAM SPAM
+        if not spam_detected:
+            for pattern in telegram_spam_patterns:
+                if pattern in text:
+                    spam_detected = True
+                    spam_reason = f"Telegram spam: '{pattern}'"
+                    break
         
         # 🔍 CHECK FORWARDED SPAM
-        elif is_forwarded and len(text) > 100:
+        if not spam_detected and is_forwarded and len(text) > 50:
             spam_detected = True
             spam_reason = "Long forwarded message"
         
         # 🔍 CHECK EXCESSIVE EMOJIS (spam often has many emojis)
-        elif sum(1 for char in text if ord(char) > 127) > 20 and len(text) > 50:
-            spam_detected = True
-            spam_reason = "Excessive emojis"
+        if not spam_detected:
+            emoji_count = sum(1 for char in text if ord(char) > 127)
+            if emoji_count > 15 and len(text) > 30:
+                spam_detected = True
+                spam_reason = f"Excessive emojis: {emoji_count}"
         
         # 🔍 CHECK ALL CAPS SPAM
-        elif len(text) > 30 and text.isupper():
+        if not spam_detected and len(text) > 20 and text.isupper():
             spam_detected = True
             spam_reason = "All caps message"
         
         # 🔍 CHECK REPEATED CHARACTERS (aaaaaaa, !!!!!, etc)
-        else:
+        if not spam_detected:
             import re
-            if re.search(r'(.)\1{5,}', text):  # Same character repeated 6+ times
+            if re.search(r'(.)\1{4,}', text):  # Same character repeated 5+ times
                 spam_detected = True
                 spam_reason = "Repeated characters"
         
@@ -1075,10 +1092,24 @@ def handle_message(message):
         logger.info(f"🔍 Processing message: chat_id={chat_id}, user_id={user_id}, text='{text[:50]}'")
         
         # 🛡️ SPAM PROTECTION - Check for spam content before any processing
-        if user_id != ADMIN_ID and text and is_spam_message(message):
-            logger.warning(f"🚫 SPAM BLOCKED: user_id={user_id}, text='{text[:100]}'")
-            # Silently ignore spam messages - don't respond to avoid encouraging spammers
-            return
+        if user_id != ADMIN_ID and text:
+            logger.info(f"🔍 SPAM CHECK: Checking message from user {user_id}: '{text[:50]}'")
+            if is_spam_message(message):
+                logger.error(f"🚫 SPAM BLOCKED: user_id={user_id}, text='{text[:100]}'")
+                # Send notification to admin
+                admin_notification = f"""🚫 <b>SPAM BLOCKED</b>
+
+👤 <b>User:</b> <code>{user_id}</code>
+📝 <b>Message:</b> <code>{text[:200]}</code>
+⏰ <b>Time:</b> {datetime.now().strftime('%H:%M:%S')}"""
+                try:
+                    send_message(ADMIN_ID, admin_notification)
+                except:
+                    pass
+                # Silently ignore spam messages - don't respond to avoid encouraging spammers
+                return
+            else:
+                logger.info(f"✅ CLEAN MESSAGE: user {user_id} passed spam check")
         
         # TEZKOR: Faqat yangi foydalanuvchilarni saqlash
         if str(user_id) not in users_db:
@@ -1456,6 +1487,72 @@ def handle_message(message):
             except Exception as spam_list_error:
                 logger.error(f"❌ Spam list error: {spam_list_error}")
                 send_message(chat_id, f"❌ Spam ro'yxat xatolik: {str(spam_list_error)}")
+        elif text == '/testmyspam' and user_id == ADMIN_ID:
+            # Test current spam protection with real examples
+            try:
+                test_messages = [
+                    "Claim free Ethereum www.freeether.net - Click, Connect, Collect!",
+                    "FREE ETH ALERT! 🚨 Visit our website NOW!",
+                    "Bitcoin airdrop! Limited time only! Join our channel!",
+                    "Salom! Kino kodi 123 kerak",
+                    "🎬 Film: Avengers",
+                    "HURRY UP!!! LAST CHANCE TO GET FREE CRYPTO!!!"
+                ]
+                
+                results = []
+                for i, test_text in enumerate(test_messages, 1):
+                    test_msg = {
+                        'text': test_text.lower(),
+                        'from': {'id': 99999}
+                    }
+                    
+                    is_spam_result = is_spam_message(test_msg)
+                    status = "🚫 BLOCKED" if is_spam_result else "✅ ALLOWED"
+                    results.append(f"{i}. {status}\n   <code>{test_text[:50]}</code>")
+                
+                result_text = f"""🧪 <b>REAL SPAM TEST RESULTS</b>
+
+{''.join(f'{r}\n' for r in results)}
+
+🎯 <b>Expected:</b> 1-3,6 should be BLOCKED, 4-5 should be ALLOWED
+
+📊 <b>Current Protection Status:</b> {'✅ Working' if len([r for r in results if '🚫' in r]) >= 3 else '❌ Not Working Properly'}"""
+
+                send_message(chat_id, result_text)
+                
+            except Exception as test_error:
+                logger.error(f"❌ Test my spam error: {test_error}")
+                send_message(chat_id, f"❌ Test error: {str(test_error)}")
+        elif text.startswith('/checkspam ') and user_id == ADMIN_ID:
+            # Check if specific text would be detected as spam
+            try:
+                spam_text = text[11:]  # Remove '/checkspam '
+                if not spam_text:
+                    send_message(chat_id, "❌ Format: <code>/checkspam your message here</code>")
+                    return
+                
+                test_message = {
+                    'text': spam_text.lower(),
+                    'from': {'id': 88888}
+                }
+                
+                is_spam_result = is_spam_message(test_message)
+                
+                result_text = f"""🔍 <b>SPAM CHECK RESULT</b>
+
+📝 <b>Your message:</b>
+<code>{spam_text}</code>
+
+🎯 <b>Detection result:</b>
+{'🚫 WOULD BE BLOCKED (SPAM)' if is_spam_result else '✅ WOULD BE ALLOWED (CLEAN)'}
+
+💡 <b>Status:</b> {'This message would be silently ignored' if is_spam_result else 'This message would be processed normally'}"""
+
+                send_message(chat_id, result_text)
+                
+            except Exception as check_error:
+                logger.error(f"❌ Check spam error: {check_error}")
+                send_message(chat_id, f"❌ Check error: {str(check_error)}")
         elif text == '/clearcache' and user_id == ADMIN_ID:
             # Test subscription as regular user (bypass admin privileges)
             try:
