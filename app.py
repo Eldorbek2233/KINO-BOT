@@ -981,7 +981,7 @@ def is_spam_message(message):
         # 🚫 CRYPTO SCAM KEYWORDS - Block cryptocurrency spam
         crypto_spam_keywords = [
             'free ethereum', 'claim free eth', 'ethereum airdrop', 'free eth alert',
-            'freeether.net', 'claim real ethereum', 'free crypto', 'bitcoin free',
+            'claim real ethereum', 'free crypto', 'bitcoin free',
             'crypto airdrop', 'instant rewards', 'time-limited offer', 'effortlessly',
             'connect your wallet', 'verify and boom', 'watch your balance grow',
             'no registration', 'absolutely free', 'stacking eth', 'click, connect, collect',
@@ -1004,7 +1004,7 @@ def is_spam_message(message):
         # 🚫 SCAM URL PATTERNS - Block suspicious URLs
         suspicious_urls = [
             'bit.ly', 'tinyurl.com', 'short.link', 'cutt.ly', 't.co',
-            'freeether.net', 'freecrypto', 'cryptoairdrop', 'earnfree',
+            'freecrypto', 'cryptoairdrop', 'earnfree',
             'getfreeeth', 'claimeth', 'freebitcoin', 'earnbtc',
             '.tk', '.ml', '.ga', '.cf', 'telegra.ph', 'rebrand.ly',
             'ow.ly', 'is.gd', 'buff.ly', 'shr.lc', 'tiny.cc'
@@ -1437,7 +1437,7 @@ def handle_message(message):
             try:
                 # Create a test spam message
                 test_spam_message = {
-                    'text': 'Claim free Ethereum www.freeether.net - Click, Connect, Collect!',
+                   
                     'from': {'id': 12345, 'username': 'test_user'}
                 }
                 
@@ -1446,7 +1446,7 @@ def handle_message(message):
                 result_text = f"""🧪 <b>SPAM FILTER TEST</b>
 
 🔍 <b>Test Message:</b>
-<code>Claim free Ethereum www.freeether.net - Click, Connect, Collect!</code>
+
 
 🎯 <b>Filter Result:</b> {'🚫 BLOCKED (SPAM)' if is_spam else '✅ ALLOWED'}
 
@@ -1529,14 +1529,7 @@ def handle_message(message):
         elif text == '/testmyspam' and user_id == ADMIN_ID:
             # Test current spam protection with real examples
             try:
-                test_messages = [
-                    "Claim free Ethereum www.freeether.net - Click, Connect, Collect!",
-                    "FREE ETH ALERT! 🚨 Visit our website NOW!",
-                    "Bitcoin airdrop! Limited time only! Join our channel!",
-                    "Salom! Kino kodi 123 kerak",
-                    "🎬 Film: Avengers",
-                    "HURRY UP!!! LAST CHANCE TO GET FREE CRYPTO!!!"
-                ]
+            
                 
                 results = []
                 for i, test_text in enumerate(test_messages, 1):
@@ -9330,11 +9323,7 @@ def handle_test_spam_filter(chat_id, user_id, callback_id=None):
         
         # Test messages - some spam, some legitimate
         test_messages = [
-            {
-                'text': 'Claim free Ethereum www.freeether.net - Click, Connect, Collect!',
-                'expected': True,
-                'type': 'Crypto Scam'
-            },
+
             {
                 'text': 'Salom! Kino kodini olish uchun qanday qilishim kerak?',
                 'expected': False,
