@@ -3964,6 +3964,7 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             
             # Data management callbacks
             'reload_data': lambda: handle_reload_data(chat_id, user_id, callback_id),
+            'cancel_delete_session': lambda: handle_cancel_delete_session(chat_id, user_id, callback_id),
         }
         
         if data in callback_map:
@@ -4238,7 +4239,7 @@ def handle_add_channel_session(chat_id, message):
             del upload_sessions[user_id]
 
 def handle_upload_session(chat_id, message):
-    """Handle video upload in professional upload session"""
+    """Handle video upload and movie deletion in professional sessions"""
     try:
         user_id = message.get('from', {}).get('id')
         if user_id != ADMIN_ID:
@@ -4248,6 +4249,93 @@ def handle_upload_session(chat_id, message):
         if not session:
             return
         
+        # Handle movie deletion session
+        if session.get('type') == 'delete_movie':
+            text = message.get('text', '').strip()
+            
+            if session['status'] == 'waiting_movie_code':
+                # Clean and normalize code
+                clean_code = text.replace('#', '').strip()
+                
+                # Search for movie
+                movie_data = None
+                found_code = None
+                
+                # Try multiple formats
+                for search_code in [clean_code, f"#{clean_code}", text.strip()]:
+                    if search_code in movies_db:
+                        movie_data = movies_db[search_code]
+                        found_code = search_code
+                        break
+                
+                if movie_data:
+                    # Movie found - ask for confirmation
+                    if isinstance(movie_data, dict):
+                        title = movie_data.get('title', f'Kino {found_code}')
+                        file_size = movie_data.get('file_size', 0)
+                        size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
+                    else:
+                        title = f'Kino {found_code}'
+                        size_mb = 0
+                    
+                    session.update({
+                        'status': 'waiting_confirmation',
+                        'movie_code': found_code,
+                        'movie_data': movie_data
+                    })
+                    
+                    text = f"""🗑 <b>KINO O'CHIRISH TASDIQI</b>
+
+🎬 <b>Topilgan kino:</b>
+• Kod: <code>{found_code}</code>
+• Nomi: <b>{title}</b>
+• Hajm: <code>{size_mb:.1f} MB</code>
+
+⚠️ <b>Bu kinoni o'chirishni tasdiqlaysizmi?</b>
+
+💡 O'chirilgan kinolar qaytarilmaydi!"""
+
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '✅ Ha, O\'chirish', 'callback_data': f'confirm_delete_movie_{found_code}'},
+                                {'text': '❌ Yo\'q, Bekor Qilish', 'callback_data': 'cancel_delete_session'}
+                            ]
+                        ]
+                    }
+                    
+                    send_message(chat_id, text, keyboard)
+                    logger.info(f"🔍 Found movie for deletion: {found_code} - {title}")
+                    
+                else:
+                    # Movie not found
+                    available_codes = list(movies_db.keys())[:10]
+                    codes_text = ", ".join(available_codes) if available_codes else "Hech narsa"
+                    
+                    text = f"""❌ <b>Kino topilmadi!</b>
+
+🔍 <b>Qidirilgan kod:</b> <code>{text}</code>
+
+📋 <b>Mavjud kodlar:</b>
+{codes_text}
+
+🎯 <b>Boshqa kod yuboring yoki bekor qiling:</b>"""
+
+                    keyboard = {
+                        'inline_keyboard': [
+                            [
+                                {'text': '📋 Barcha Kodlar', 'callback_data': 'admin_movies_list'},
+                                {'text': '❌ Bekor Qilish', 'callback_data': 'cancel_delete_session'}
+                            ]
+                        ]
+                    }
+                    
+                    send_message(chat_id, text, keyboard)
+                    logger.warning(f"❌ Movie not found for deletion: {text}")
+                
+                return
+        
+        # Handle video upload session
         if session['status'] == 'waiting_video':
             # Check if message contains video
             video = message.get('video')
@@ -6772,7 +6860,7 @@ def handle_start_upload(chat_id, user_id):
         send_message(chat_id, "❌ Yuklash boshlashda xatolik!")
 
 def handle_delete_movies_menu_impl(chat_id, user_id):
-    """Movie deletion menu"""
+    """Movie deletion menu - Interactive Code Input System"""
     try:
         if user_id != ADMIN_ID:
             send_message(chat_id, "❌ Admin huquqi kerak!")
@@ -6809,19 +6897,19 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
             send_message(chat_id, text, keyboard)
             return
         
-        movie_list = list(movies_db.keys())[:20]  # First 20 movies
+        movie_list = list(movies_db.keys())[:15]  # First 15 movies for display
         total_movies = len(movies_db)
         
         text = f"""🗑 <b>KINO O'CHIRISH TIZIMI</b>
 
 📊 <b>Mavjud kinolar:</b> <code>{total_movies}</code> ta
 
-📋 <b>O'chirish uchun kod tanlang:</b>
+📋 <b>Mavjud kino kodlari:</b>
 
 """
         
         # Add movies to text
-        for i, code in enumerate(movie_list[:10], 1):
+        for i, code in enumerate(movie_list[:15], 1):
             movie_info = movies_db[code]
             if isinstance(movie_info, dict):
                 title = movie_info.get('title', f'Kino {code}')
@@ -6829,13 +6917,46 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
             else:
                 text += f"{i}. <code>{code}</code> - Kino {code}\n"
         
-        if total_movies > 10:
-            text += f"\n... va yana {total_movies - 10} ta kino"
+        if total_movies > 15:
+            text += f"\n... va yana {total_movies - 15} ta kino"
         
-        text += f"\n\n⚠️ <b>Diqqat!</b> O'chirilgan kinolar qaytarilmaydi!"
+        text += f"""
+
+🎯 <b>O'chirmoqchi bo'lgan kino kodini yuboring!</b>
+
+💡 <b>Misol:</b> <code>123</code> yoki <code>#123</code>
+
+⚠️ <b>Diqqat!</b> O'chirilgan kinolar qaytarilmaydi!"""
+
+        # Start deletion session
+        upload_sessions[user_id] = {
+            'type': 'delete_movie',
+            'status': 'waiting_movie_code',
+            'start_time': datetime.now().isoformat()
+        }
         
-        # Create delete buttons for first 8 movies
-        keyboard = {'inline_keyboard': []}
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🗑 Barchasini O\'chirish', 'callback_data': 'delete_all_movies'},
+                    {'text': '📋 Kinolar Ro\'yxati', 'callback_data': 'admin_movies_list'}
+                ],
+                [
+                    {'text': '🔄 Yangilash', 'callback_data': 'delete_movies'},
+                    {'text': '❌ Bekor Qilish', 'callback_data': 'cancel_delete_session'}
+                ],
+                [
+                    {'text': '🔙 Orqaga', 'callback_data': 'movies_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        logger.info(f"✅ Started delete session for admin {user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Delete movies menu error: {e}")
+        send_message(chat_id, "❌ O'chirish menusida xatolik!")
         
         for i in range(0, min(8, len(movie_list)), 2):
             row = []
@@ -9229,6 +9350,135 @@ def handle_reload_data(chat_id, user_id, callback_id):
     except Exception as e:
         logger.error(f"❌ Reload data error: {e}")
         answer_callback_query(callback_id, "❌ Xatolik!", True)
+
+def handle_cancel_delete_session(chat_id, user_id, callback_id):
+    """Cancel movie deletion session"""
+    try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+        
+        # Remove delete session
+        if user_id in upload_sessions and upload_sessions[user_id].get('type') == 'delete_movie':
+            del upload_sessions[user_id]
+            logger.info(f"✅ Cancelled delete session for admin {user_id}")
+        
+        text = """❌ <b>KINO O'CHIRISH BEKOR QILINDI</b>
+
+🔄 Kino o'chirish jarayoni bekor qilindi.
+
+🎬 Boshqa amallarni tanlashingiz mumkin."""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🗑 Qayta O\'chirish', 'callback_data': 'delete_movies'},
+                    {'text': '📤 Kino Yuklash', 'callback_data': 'start_upload'}
+                ],
+                [
+                    {'text': '🔙 Kino Boshqaruvi', 'callback_data': 'movies_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, text, keyboard)
+        answer_callback_query(callback_id, "❌ Bekor qilindi")
+        
+    except Exception as e:
+        logger.error(f"❌ Cancel delete session error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik!", True)
+
+def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
+    """Confirm and delete specific movie"""
+    try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+        
+        # Find movie
+        movie_data = None
+        found_code = None
+        
+        # Try multiple formats
+        for search_code in [movie_code, f"#{movie_code}", movie_code.replace('#', '')]:
+            if search_code in movies_db:
+                movie_data = movies_db[search_code]
+                found_code = search_code
+                break
+        
+        if not movie_data:
+            answer_callback_query(callback_id, "❌ Kino topilmadi!", True)
+            return
+        
+        # Get movie info
+        if isinstance(movie_data, dict):
+            title = movie_data.get('title', f'Kino {found_code}')
+            file_size = movie_data.get('file_size', 0)
+            size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
+        else:
+            title = f'Kino {found_code}'
+            size_mb = 0
+        
+        # Delete from memory
+        del movies_db[found_code]
+        
+        # Delete from MongoDB if available
+        if is_mongodb_available():
+            try:
+                mongo_db.movies.delete_one({'code': found_code})
+                logger.info(f"💾 Deleted movie from MongoDB: {found_code}")
+            except Exception as mongo_err:
+                logger.error(f"❌ MongoDB delete error: {mongo_err}")
+        
+        # Update file_ids.json
+        try:
+            with open('file_ids.json', 'w', encoding='utf-8') as f:
+                json.dump(movies_db, f, ensure_ascii=False, indent=2)
+            logger.info(f"💾 Updated file_ids.json after deletion")
+        except Exception as file_err:
+            logger.error(f"❌ File update error: {file_err}")
+        
+        # Auto-save
+        auto_save_data()
+        
+        # Clear upload session if exists
+        if user_id in upload_sessions:
+            del upload_sessions[user_id]
+        
+        success_text = f"""✅ <b>KINO MUVAFFAQIYATLI O'CHIRILDI!</b>
+
+🗑 <b>O'chirilgan kino:</b>
+• Kod: <code>{found_code}</code>
+• Nomi: <b>{title}</b>
+• Hajm: <code>{size_mb:.1f} MB</code>
+
+📊 <b>Hozirgi holat:</b>
+• Qolgan kinolar: <code>{len(movies_db)}</code> ta
+• MongoDB: {"✅ Yangilandi" if is_mongodb_available() else "❌ O'chiq"}
+• Fayl: ✅ Yangilandi
+
+🎯 <b>Kino butunlay o'chirildi va qaytarilmaydi!</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🗑 Yana O\'chirish', 'callback_data': 'delete_movies'},
+                    {'text': '📤 Kino Yuklash', 'callback_data': 'start_upload'}
+                ],
+                [
+                    {'text': '📋 Kinolar Ro\'yxati', 'callback_data': 'admin_movies_list'},
+                    {'text': '🔙 Kino Boshqaruvi', 'callback_data': 'movies_admin'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, success_text, keyboard)
+        answer_callback_query(callback_id, f"✅ {found_code} o'chirildi!")
+        logger.info(f"✅ Movie deleted successfully: {found_code} - {title} by admin {user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Confirm delete movie error: {e}")
+        answer_callback_query(callback_id, "❌ O'chirishda xatolik!", True)
 
 if mongodb_status:
     logger.info("🎯 MongoDB integration: ACTIVE")
