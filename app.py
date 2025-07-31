@@ -13,6 +13,7 @@ import logging
 import threading
 import requests
 import psutil
+import re
 from flask import Flask, request, jsonify
 from datetime import datetime
 from pymongo import MongoClient
@@ -1001,7 +1002,6 @@ def is_spam_message(message):
         ]
         
         # 🚫 Check for any URLs in the message (more aggressive)
-        import re
         url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
         has_url = re.search(url_pattern, text)
         
@@ -1050,7 +1050,6 @@ def is_spam_message(message):
         
         # 🔍 CHECK REPEATED CHARACTERS (aaaaaaa, !!!!!, etc)
         if not spam_detected:
-            import re
             if re.search(r'(.)\1{4,}', text):  # Same character repeated 5+ times
                 spam_detected = True
                 spam_reason = "Repeated characters"
@@ -1121,35 +1120,43 @@ def handle_message(message):
         
         logger.info(f"💬 Message from {user_id}: {text[:50]}...")
         
-        # ULTRA FAST subscription check - HAMMA XABARLAR UCHUN MAJBURIY
-        if channels_db and user_id != ADMIN_ID:
+        # 🔧 SUBSCRIPTION CHECK - Only for certain commands, not all messages
+        # This prevents blocking users for every message
+        subscription_required_commands = ['/start', '/help']
+        should_check_subscription = (
+            channels_db and 
+            user_id != ADMIN_ID and 
+            text in subscription_required_commands
+        )
+        
+        if should_check_subscription:
             try:
-                # MAJBURIY AZOLIK - faqat admin bypass
-                logger.info(f"🔍 MANDATORY: Checking subscription for user {user_id}")
+                logger.info(f"🔍 SUBSCRIPTION: Checking for user {user_id} on command {text}")
                 
                 # Cache dan tezkor tekshirish
                 cached_result = subscription_cache.get(user_id)
                 if cached_result and cached_result.get('expires', 0) > time.time():
                     if not cached_result.get('is_subscribed', False):
-                        logger.info(f"🚫 MANDATORY: Cached block for user {user_id}")
+                        logger.info(f"🚫 SUBSCRIPTION: Cached block for user {user_id}")
                         send_subscription_message(chat_id, user_id)
                         return
                     else:
-                        logger.info(f"✅ MANDATORY: Cached access for user {user_id}")
+                        logger.info(f"✅ SUBSCRIPTION: Cached access for user {user_id}")
                 else:
                     # To'liq tekshirish - cache yo'q yoki expired
                     if not check_all_subscriptions(user_id):
-                        logger.info(f"🚫 MANDATORY: Blocking user {user_id} - subscription required")
+                        logger.info(f"🚫 SUBSCRIPTION: Blocking user {user_id} - subscription required")
                         send_subscription_message(chat_id, user_id)
                         return
                     else:
-                        logger.info(f"✅ MANDATORY: User {user_id} verified - access granted")
+                        logger.info(f"✅ SUBSCRIPTION: User {user_id} verified - access granted")
                     
             except Exception as check_error:
                 logger.error(f"❌ Subscription check error: {check_error}")
-                # Xatolik bo'lsa ham majburiy azolik tekshiruvidan o'tishi kerak
-                send_subscription_message(chat_id, user_id) 
-                return
+                # Only block on explicit subscription commands
+                if text in subscription_required_commands:
+                    send_subscription_message(chat_id, user_id) 
+                    return
         
         # Handle upload sessions
         if user_id == ADMIN_ID and user_id in upload_sessions:
