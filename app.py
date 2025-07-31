@@ -798,6 +798,14 @@ def save_user(user_info, user_id):
 # Flask Application
 app = Flask(__name__)
 
+# Initialize data on app startup
+try:
+    init_mongodb()
+    load_data()
+    logger.info(f"🚀 APP STARTUP: Loaded {len(users_db)} users, {len(movies_db)} movies, {len(channels_db)} channels")
+except Exception as startup_error:
+    logger.error(f"❌ APP STARTUP ERROR: {startup_error}")
+
 @app.route('/')
 def home():
     """Professional home page with full bot information"""
@@ -3950,9 +3958,12 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             'admin_updates': lambda: handle_admin_updates(chat_id, user_id),
             
             # Spam protection callbacks
-            'test_spam_filter': lambda: handle_test_spam_filter(chat_id, user_id),
+            'test_spam_filter': lambda: handle_test_spam_filter(chat_id, user_id, callback_id),
             'spam_protection_log': lambda: handle_spam_protection_log(chat_id, user_id),
             'clear_spam_list': lambda: handle_clear_spam_list(chat_id, user_id, callback_id),
+            
+            # Data management callbacks
+            'reload_data': lambda: handle_reload_data(chat_id, user_id, callback_id),
         }
         
         if data in callback_map:
@@ -6767,6 +6778,11 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
             send_message(chat_id, "❌ Admin huquqi kerak!")
             return
         
+        # Debug: Log current movies_db state
+        logger.info(f"🔍 DEBUG: movies_db has {len(movies_db)} movies")
+        if movies_db:
+            logger.info(f"🔍 DEBUG: First 3 movies: {list(movies_db.keys())[:3]}")
+        
         if not movies_db:
             text = """🗑 <b>KINO O'CHIRISH</b>
 
@@ -6774,12 +6790,17 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
 
 🎬 Avval kino yuklang, keyin o'chiring.
 
+💡 <b>Debug:</b> movies_db bo'sh. file_ids.json ni tekshiring yoki kinolarni qayta yuklang.
+
 🎭 <b>Professional Kino Bot</b>"""
             
             keyboard = {
                 'inline_keyboard': [
                     [
                         {'text': '📤 Kino Yuklash', 'callback_data': 'start_upload'},
+                        {'text': '🔄 Ma\'lumotlarni Qayta Yuklash', 'callback_data': 'reload_data'}
+                    ],
+                    [
                         {'text': '🔙 Orqaga', 'callback_data': 'movies_admin'}
                     ]
                 ]
@@ -8959,7 +8980,7 @@ def handle_photo_upload(chat_id, message):
     except Exception as e:
         logger.error(f"❌ Photo upload error: {e}")
 
-def handle_test_spam_filter(chat_id, user_id):
+def handle_test_spam_filter(chat_id, user_id, callback_id=None):
     """Test the spam filter with sample messages"""
     try:
         if user_id != ADMIN_ID:
@@ -9154,6 +9175,59 @@ def handle_clear_spam_list(chat_id, user_id, callback_id):
         
     except Exception as e:
         logger.error(f"❌ Clear spam list error: {e}")
+        answer_callback_query(callback_id, "❌ Xatolik!", True)
+
+def handle_reload_data(chat_id, user_id, callback_id):
+    """Reload all data from files and MongoDB"""
+    try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+        
+        # Store old counts
+        old_users = len(users_db)
+        old_movies = len(movies_db)
+        old_channels = len(channels_db)
+        
+        # Reload all data
+        init_mongodb()
+        load_data()
+        
+        # New counts
+        new_users = len(users_db)
+        new_movies = len(movies_db)
+        new_channels = len(channels_db)
+        
+        result_text = f"""🔄 <b>MA'LUMOTLAR QAYTA YUKLANDI</b>
+
+📊 <b>Natijalar:</b>
+• Foydalanuvchilar: <code>{old_users} → {new_users}</code>
+• Kinolar: <code>{old_movies} → {new_movies}</code>
+• Kanallar: <code>{old_channels} → {new_channels}</code>
+
+💾 <b>Manbalar:</b>
+• MongoDB: {"✅ Ulanish faol" if is_mongodb_available() else "❌ Ulanish yo'q"}
+• file_ids.json: ✅
+• users.json: ✅
+• channels.json: ✅
+
+✅ <b>Ma'lumotlar muvaffaqiyatli yangilandi!</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🗑 Kinolarni O\'chirish', 'callback_data': 'delete_movies'},
+                    {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, result_text, keyboard)
+        answer_callback_query(callback_id, "✅ Ma'lumotlar yangilandi!")
+        logger.info(f"✅ Admin {user_id} reloaded data: {new_movies} movies, {new_users} users, {new_channels} channels")
+        
+    except Exception as e:
+        logger.error(f"❌ Reload data error: {e}")
         answer_callback_query(callback_id, "❌ Xatolik!", True)
 
 if mongodb_status:
