@@ -4379,25 +4379,34 @@ def handle_upload_session(chat_id, message):
         
         session = upload_sessions.get(user_id)
         if not session:
+            logger.warning(f"🚫 DEBUG: No session found for user {user_id}")
             return
+        
+        logger.info(f"🔍 DEBUG: Session type={session.get('type')}, status={session.get('status')}")
         
         # Handle movie deletion session
         if session.get('type') == 'delete_movie':
             text = message.get('text', '').strip()
+            logger.info(f"🔍 DEBUG: Delete movie session, text='{text}'")
             
             if session['status'] == 'waiting_movie_code':
                 # Clean and normalize code
                 clean_code = text.replace('#', '').strip()
+                logger.info(f"🔍 DEBUG: Searching for movie code: '{clean_code}'")
                 
                 # Search for movie
                 movie_data = None
                 found_code = None
                 
+                logger.info(f"🔍 DEBUG: movies_db has {len(movies_db)} movies: {list(movies_db.keys())[:5]}")
+                
                 # Try multiple formats
                 for search_code in [clean_code, f"#{clean_code}", text.strip()]:
+                    logger.info(f"🔍 DEBUG: Trying search_code: '{search_code}'")
                     if search_code in movies_db:
                         movie_data = movies_db[search_code]
                         found_code = search_code
+                        logger.info(f"✅ DEBUG: Found movie with code: '{found_code}'")
                         break
                 
                 if movie_data:
@@ -4443,6 +4452,8 @@ def handle_upload_session(chat_id, message):
                     # Movie not found
                     available_codes = list(movies_db.keys())[:10]
                     codes_text = ", ".join(available_codes) if available_codes else "Hech narsa"
+                    
+                    logger.warning(f"❌ DEBUG: Movie not found for code '{text}'. Available codes: {available_codes}")
                     
                     text = f"""❌ <b>Kino topilmadi!</b>
 
@@ -6997,6 +7008,18 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
         if user_id != ADMIN_ID:
             send_message(chat_id, "❌ Admin huquqi kerak!")
             return
+        
+        # Emergency check: Reload data if movies_db is empty
+        if not movies_db:
+            logger.warning("🔄 Emergency reload: movies_db is empty, attempting to reload...")
+            try:
+                if os.path.exists('file_ids.json'):
+                    with open('file_ids.json', 'r', encoding='utf-8') as f:
+                        file_movies = json.load(f)
+                        movies_db.update(file_movies)
+                        logger.info(f"✅ Emergency reload: {len(file_movies)} movies loaded from file_ids.json")
+            except Exception as reload_error:
+                logger.error(f"❌ Emergency reload failed: {reload_error}")
         
         # Debug: Log current movies_db state
         logger.info(f"🔍 DEBUG: movies_db has {len(movies_db)} movies")
