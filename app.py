@@ -1209,7 +1209,7 @@ def handle_message(message):
             handle_admin_panel(chat_id, user_id)
         elif text == '/delete' and user_id == ADMIN_ID:
             logger.info(f"🗑 ADMIN DELETE COMMAND: {user_id} requested movie deletion menu")
-            handle_delete_movies_menu_impl(chat_id)
+            handle_delete_movies_menu_impl(chat_id, user_id)
         elif text == '/stats' and user_id == ADMIN_ID:
             handle_statistics(chat_id, user_id)
         elif text.startswith('/addchannel') and user_id == ADMIN_ID:
@@ -7040,9 +7040,13 @@ def handle_start_upload(chat_id, user_id):
         logger.error(f"❌ Start upload error: {e}")
         send_message(chat_id, "❌ Yuklash boshlashda xatolik!")
 
-def handle_delete_movies_menu_impl(chat_id, user_id):
-    """Movie deletion menu - Interactive Code Input System"""
+def handle_delete_movies_menu_impl(chat_id, user_id=None):
+    """NEW: Movie deletion menu with clickable buttons for each movie"""
     try:
+        # Determine user_id if not provided (for callback compatibility)
+        if user_id is None:
+            user_id = ADMIN_ID
+            
         if user_id != ADMIN_ID:
             send_message(chat_id, "❌ Admin huquqi kerak!")
             return
@@ -7071,9 +7075,7 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
 
 🎬 Avval kino yuklang, keyin o'chiring.
 
-💡 <b>Debug:</b> movies_db bo'sh. file_ids.json ni tekshiring yoki kinolarni qayta yuklang.
-
-🎭 <b>Professional Kino Bot</b>"""
+💡 <b>Debug:</b> movies_db bo'sh. file_ids.json ni tekshiring yoki kinolarni qayta yuklang."""
             
             keyboard = {
                 'inline_keyboard': [
@@ -7090,82 +7092,63 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
             send_message(chat_id, text, keyboard)
             return
         
-        movie_list = list(movies_db.keys())[:15]  # First 15 movies for display
+        movie_list = list(movies_db.keys())[:20]  # Show first 20 movies
         total_movies = len(movies_db)
         
         text = f"""🗑 <b>KINO O'CHIRISH TIZIMI</b>
 
 📊 <b>Mavjud kinolar:</b> <code>{total_movies}</code> ta
 
-📋 <b>Mavjud kino kodlari:</b>
+🎯 <b>O'chirmoqchi bo'lgan kinoni tugmasini bosing!</b>
 
-"""
-        
-        # Add movies to text
-        for i, code in enumerate(movie_list[:15], 1):
-            movie_info = movies_db[code]
-            if isinstance(movie_info, dict):
-                title = movie_info.get('title', f'Kino {code}')
-                text += f"{i}. <code>{code}</code> - {title}\n"
-            else:
-                text += f"{i}. <code>{code}</code> - Kino {code}\n"
-        
-        if total_movies > 15:
-            text += f"\n... va yana {total_movies - 15} ta kino"
-        
-        text += f"""
+⚠️ <b>Diqqat!</b> O'chirilgan kinolar qaytarilmaydi!
 
-🎯 <b>O'chirmoqchi bo'lgan kino kodini yuboring!</b>
-
-💡 <b>Misol:</b> <code>123</code> yoki <code>#123</code>
-
-⚠️ <b>Diqqat!</b> O'chirilgan kinolar qaytarilmaydi!"""
-
-        # Start deletion session
-        upload_sessions[user_id] = {
-            'type': 'delete_movie',
-            'status': 'waiting_movie_code',
-            'start_time': datetime.now().isoformat()
-        }
+📋 <b>Kinolar ro'yxati:</b>"""
         
-        keyboard = {
-            'inline_keyboard': [
-                [
-                    {'text': '🗑 Barchasini O\'chirish', 'callback_data': 'delete_all_movies'},
-                    {'text': '📋 Kinolar Ro\'yxati', 'callback_data': 'admin_movies_list'}
-                ],
-                [
-                    {'text': '🔄 Yangilash', 'callback_data': 'delete_movies'},
-                    {'text': '❌ Bekor Qilish', 'callback_data': 'cancel_delete_session'}
-                ],
-                [
-                    {'text': '🔙 Orqaga', 'callback_data': 'movies_admin'}
-                ]
-            ]
-        }
+        # Create keyboard with movie deletion buttons
+        keyboard = {'inline_keyboard': []}
         
-        send_message(chat_id, text, keyboard)
-        logger.info(f"✅ Started delete session for admin {user_id}")
-        
-    except Exception as e:
-        logger.error(f"❌ Delete movies menu error: {e}")
-        send_message(chat_id, "❌ O'chirish menusida xatolik!")
-        
-        for i in range(0, min(8, len(movie_list)), 2):
+        # Add movie buttons (2 per row)
+        for i in range(0, min(20, len(movie_list)), 2):
             row = []
             for j in range(2):
                 if i + j < len(movie_list):
                     code = movie_list[i + j]
+                    movie_info = movies_db[code]
+                    
+                    # Get movie title
+                    if isinstance(movie_info, dict):
+                        title = movie_info.get('title', f'Kino {code}')
+                        # Truncate long titles
+                        if len(title) > 15:
+                            title = title[:15] + "..."
+                    else:
+                        title = f'Kino {code}'
+                    
+                    # Clean code for display
                     display_code = code.replace('#', '') if code.startswith('#') else code
-                    row.append({'text': f'🗑 {display_code}', 'callback_data': f'delete_movie_{code}'})
+                    button_text = f'🗑 {display_code}: {title}'
+                    
+                    row.append({'text': button_text, 'callback_data': f'delete_movie_{code}'})
+            
             if row:
                 keyboard['inline_keyboard'].append(row)
         
-        # Add navigation buttons
+        # Add management buttons
+        if total_movies > 20:
+            keyboard['inline_keyboard'].append([
+                {'text': f'📄 Keyingi {total_movies - 20} ta kino', 'callback_data': 'delete_movies_page_2'},
+                {'text': '� Yangilash', 'callback_data': 'delete_movies'}
+            ])
+        else:
+            keyboard['inline_keyboard'].append([
+                {'text': '🔄 Yangilash', 'callback_data': 'delete_movies'}
+            ])
+        
         keyboard['inline_keyboard'].extend([
             [
-                {'text': '🗑 Barchasini o\'chirish', 'callback_data': 'delete_all_movies'},
-                {'text': '🔄 Yangilash', 'callback_data': 'delete_movies'}
+                {'text': '🗑 Barchasini O\'chirish', 'callback_data': 'delete_all_movies_confirm'},
+                {'text': '� Kinolar Ro\'yxati', 'callback_data': 'admin_movies_list'}
             ],
             [
                 {'text': '🔙 Orqaga', 'callback_data': 'movies_admin'}
@@ -7173,6 +7156,7 @@ def handle_delete_movies_menu_impl(chat_id, user_id):
         ])
         
         send_message(chat_id, text, keyboard)
+        logger.info(f"✅ DELETE MENU: Showed {len(movie_list)} movies with buttons for admin {user_id}")
         
     except Exception as e:
         logger.error(f"❌ Delete movies menu error: {e}")
