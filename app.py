@@ -4371,98 +4371,113 @@ def handle_add_channel_session(chat_id, message):
             del upload_sessions[user_id]
 
 def handle_upload_session(chat_id, message):
-    """Handle video upload and movie deletion in professional sessions"""
+    """Handle video upload and movie deletion in professional sessions - COMPLETELY FIXED"""
     try:
         user_id = message.get('from', {}).get('id')
         if user_id != ADMIN_ID:
+            logger.warning(f"🚫 Upload session called by non-admin: {user_id}")
             return
         
         session = upload_sessions.get(user_id)
         if not session:
-            logger.warning(f"🚫 DEBUG: No session found for user {user_id}")
+            logger.warning(f"🚫 No session found for user {user_id}")
             return
         
-        logger.info(f"🔍 DEBUG: Session type={session.get('type')}, status={session.get('status')}")
+        logger.info(f"🔍 SESSION DEBUG: type={session.get('type')}, status={session.get('status')}")
         
-        # Handle movie deletion session
+        # MOVIE DELETION SESSION - COMPLETELY REWRITTEN
         if session.get('type') == 'delete_movie':
             text = message.get('text', '').strip()
-            logger.info(f"🔍 DEBUG: Delete movie session, text='{text}'")
+            logger.info(f"� DELETE SESSION: Received text='{text}'")
             
-            if session['status'] == 'waiting_movie_code':
+            if session.get('status') == 'waiting_movie_code':
+                # Emergency reload if movies_db is empty
+                if not movies_db:
+                    logger.warning("� EMERGENCY: movies_db empty, reloading...")
+                    try:
+                        if os.path.exists('file_ids.json'):
+                            with open('file_ids.json', 'r', encoding='utf-8') as f:
+                                file_movies = json.load(f)
+                                movies_db.update(file_movies)
+                                logger.info(f"✅ Emergency reload: {len(file_movies)} movies loaded")
+                    except Exception as reload_err:
+                        logger.error(f"❌ Emergency reload failed: {reload_err}")
+                
                 # Clean and normalize code
                 clean_code = text.replace('#', '').strip()
-                logger.info(f"🔍 DEBUG: Searching for movie code: '{clean_code}'")
+                logger.info(f"🔍 SEARCH: Original='{text}', Clean='{clean_code}'")
+                logger.info(f"🔍 AVAILABLE: {list(movies_db.keys())[:10]}")
                 
-                # Search for movie
+                # Find movie with multiple search patterns
                 movie_data = None
                 found_code = None
                 
-                logger.info(f"🔍 DEBUG: movies_db has {len(movies_db)} movies: {list(movies_db.keys())[:5]}")
+                search_patterns = [
+                    clean_code,
+                    f"#{clean_code}",
+                    text.strip(),
+                    clean_code.upper(),
+                    clean_code.lower()
+                ]
                 
-                # Try multiple formats
-                for search_code in [clean_code, f"#{clean_code}", text.strip()]:
-                    logger.info(f"🔍 DEBUG: Trying search_code: '{search_code}'")
-                    if search_code in movies_db:
-                        movie_data = movies_db[search_code]
-                        found_code = search_code
-                        logger.info(f"✅ DEBUG: Found movie with code: '{found_code}'")
+                for pattern in search_patterns:
+                    logger.info(f"🔍 TRYING: '{pattern}'")
+                    if pattern in movies_db:
+                        movie_data = movies_db[pattern]
+                        found_code = pattern
+                        logger.info(f"✅ FOUND: '{found_code}' -> {movie_data.get('title', 'Unknown')}")
                         break
                 
                 if movie_data:
-                    # Movie found - ask for confirmation
-                    if isinstance(movie_data, dict):
-                        title = movie_data.get('title', f'Kino {found_code}')
-                        file_size = movie_data.get('file_size', 0)
-                        size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
-                    else:
-                        title = f'Kino {found_code}'
-                        size_mb = 0
+                    # Movie found - immediate deletion with confirmation
+                    title = movie_data.get('title', f'Kino {found_code}') if isinstance(movie_data, dict) else f'Kino {found_code}'
+                    file_size = movie_data.get('file_size', 0) if isinstance(movie_data, dict) else 0
+                    size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
                     
-                    session.update({
-                        'status': 'waiting_confirmation',
-                        'movie_code': found_code,
-                        'movie_data': movie_data
-                    })
-                    
-                    text = f"""🗑 <b>KINO O'CHIRISH TASDIQI</b>
+                    confirmation_text = f"""🗑 <b>KINO O'CHIRISH TASDIQI</b>
 
-🎬 <b>Topilgan kino:</b>
+✅ <b>Topilgan kino:</b>
 • Kod: <code>{found_code}</code>
 • Nomi: <b>{title}</b>
 • Hajm: <code>{size_mb:.1f} MB</code>
 
-⚠️ <b>Bu kinoni o'chirishni tasdiqlaysizmi?</b>
+⚠️ <b>DIQQAT!</b> Bu kinoni o'chirishni tasdiqlaysizmi?
 
-💡 O'chirilgan kinolar qaytarilmaydi!"""
+� <b>O'chirilgan kinolar qaytarilmaydi!</b>"""
 
                     keyboard = {
                         'inline_keyboard': [
                             [
-                                {'text': '✅ Ha, O\'chirish', 'callback_data': f'confirm_delete_movie_{found_code}'},
-                                {'text': '❌ Yo\'q, Bekor Qilish', 'callback_data': 'cancel_delete_session'}
+                                {'text': '✅ HA, O\'CHIRISH', 'callback_data': f'confirm_delete_movie_{found_code}'},
+                                {'text': '❌ YO\'Q, BEKOR QILISH', 'callback_data': 'cancel_delete_session'}
                             ]
                         ]
                     }
                     
-                    send_message(chat_id, text, keyboard)
-                    logger.info(f"🔍 Found movie for deletion: {found_code} - {title}")
+                    # Update session to confirmation stage
+                    session.update({
+                        'status': 'waiting_confirmation',
+                        'movie_code': found_code,
+                        'movie_data': movie_data,
+                        'movie_title': title
+                    })
+                    
+                    send_message(chat_id, confirmation_text, keyboard)
+                    logger.info(f"✅ CONFIRMATION SENT: {found_code} - {title}")
                     
                 else:
-                    # Movie not found
+                    # Movie not found - show available codes
                     available_codes = list(movies_db.keys())[:10]
                     codes_text = ", ".join(available_codes) if available_codes else "Hech narsa"
                     
-                    logger.warning(f"❌ DEBUG: Movie not found for code '{text}'. Available codes: {available_codes}")
-                    
-                    text = f"""❌ <b>Kino topilmadi!</b>
+                    not_found_text = f"""❌ <b>KINO TOPILMADI!</b>
 
-🔍 <b>Qidirilgan kod:</b> <code>{text}</code>
+🔍 <b>Qidirilgan:</b> <code>{text}</code>
 
-📋 <b>Mavjud kodlar:</b>
-{codes_text}
+📋 <b>Mavjud kodlar ({len(movies_db)} ta):</b>
+<code>{codes_text}</code>
 
-🎯 <b>Boshqa kod yuboring yoki bekor qiling:</b>"""
+🎯 <b>To'g'ri kod yuboring yoki bekor qiling:</b>"""
 
                     keyboard = {
                         'inline_keyboard': [
@@ -4473,8 +4488,8 @@ def handle_upload_session(chat_id, message):
                         ]
                     }
                     
-                    send_message(chat_id, text, keyboard)
-                    logger.warning(f"❌ Movie not found for deletion: {text}")
+                    send_message(chat_id, not_found_text, keyboard)
+                    logger.warning(f"❌ NOT FOUND: '{text}' not in {available_codes}")
                 
                 return
         
@@ -7347,59 +7362,92 @@ def handle_delete_single_movie(chat_id, user_id, movie_code, callback_id):
         answer_callback_query(callback_id, "❌ Xatolik!", True)
 
 def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
-    """Confirm and delete single movie - FIXED VERSION"""
+    """Confirm and delete single movie - COMPLETELY REWRITTEN AND FIXED"""
     try:
         if user_id != ADMIN_ID:
             answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
             return
-            
+        
+        logger.info(f"🗑 DELETE CONFIRM: Processing {movie_code} by admin {user_id}")
+        
+        # Emergency reload if movies_db is empty
+        if not movies_db:
+            logger.warning("🔄 EMERGENCY: movies_db empty, reloading for deletion...")
+            try:
+                if os.path.exists('file_ids.json'):
+                    with open('file_ids.json', 'r', encoding='utf-8') as f:
+                        file_movies = json.load(f)
+                        movies_db.update(file_movies)
+                        logger.info(f"✅ Emergency reload for deletion: {len(file_movies)} movies")
+            except Exception as reload_err:
+                logger.error(f"❌ Emergency reload failed: {reload_err}")
+        
+        # Find and validate movie
         if movie_code not in movies_db:
+            logger.error(f"❌ Movie {movie_code} not found in movies_db with {len(movies_db)} entries")
             answer_callback_query(callback_id, "❌ Kino topilmadi!", True)
-            handle_delete_movies_menu(chat_id, user_id)
+            # Go back to delete menu
+            handle_delete_movies_menu_impl(chat_id, user_id)
             return
         
         movie_info = movies_db[movie_code]
         title = movie_info.get('title', f'Kino {movie_code}') if isinstance(movie_info, dict) else f'Kino {movie_code}'
+        file_size = movie_info.get('file_size', 0) if isinstance(movie_info, dict) else 0
+        size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
         
-        # Delete from memory first
+        logger.info(f"🗑 DELETING: {movie_code} - {title} ({size_mb:.1f} MB)")
+        
+        # STEP 1: Delete from memory first
         del movies_db[movie_code]
+        logger.info(f"✅ Deleted from memory: {movie_code}")
         
-        # Delete from MongoDB if available
-        mongodb_deleted = False
+        # STEP 2: Update file_ids.json immediately
+        try:
+            with open('file_ids.json', 'w', encoding='utf-8') as f:
+                json.dump(movies_db, f, ensure_ascii=False, indent=2)
+            logger.info(f"✅ Updated file_ids.json: {len(movies_db)} movies remaining")
+        except Exception as file_err:
+            logger.error(f"❌ Failed to update file_ids.json: {file_err}")
+        
+        # STEP 3: Delete from MongoDB if available
+        mongodb_status = "❌ Ulanish yo'q"
         if is_mongodb_available():
             try:
                 result = mongo_db.movies.delete_one({'code': movie_code})
                 if result.deleted_count > 0:
-                    mongodb_deleted = True
-                    logger.info(f"🗑 Movie deleted from MongoDB: {movie_code}")
+                    mongodb_status = "✅ O'chirildi"
+                    logger.info(f"✅ Deleted from MongoDB: {movie_code}")
                 else:
-                    # Try update status if delete fails
-                    result = mongo_db.movies.update_one(
+                    # Try update status if direct delete fails
+                    update_result = mongo_db.movies.update_one(
                         {'code': movie_code},
                         {'$set': {'status': 'deleted', 'deleted_date': datetime.now().isoformat()}}
                     )
-                    if result.modified_count > 0:
-                        mongodb_deleted = True
-            except Exception as e:
-                logger.error(f"❌ MongoDB delete error: {e}")
+                    if update_result.modified_count > 0:
+                        mongodb_status = "✅ Marked as deleted"
+                        logger.info(f"✅ Marked as deleted in MongoDB: {movie_code}")
+                    else:
+                        mongodb_status = "⚠️ Topilmadi"
+                        logger.warning(f"⚠️ Movie not found in MongoDB: {movie_code}")
+            except Exception as mongo_err:
+                logger.error(f"❌ MongoDB delete error: {mongo_err}")
+                mongodb_status = f"❌ Xatolik: {str(mongo_err)[:50]}"
         
-        # Save changes immediately
-        try:
-            auto_save_data()
-            logger.info(f"✅ Movie {movie_code} deleted and saved")
-        except Exception as e:
-            logger.error(f"❌ Auto-save error after delete: {e}")
+        # STEP 4: Clear upload session
+        if user_id in upload_sessions:
+            del upload_sessions[user_id]
+            logger.info(f"✅ Cleared upload session for admin {user_id}")
         
-        mongodb_status = '✅ O\'chirildi' if mongodb_deleted else "❌ Xatolik yoki mavjud emas"
-        
-        text = f"""✅ <b>KINO MUVAFFAQIYATLI O'CHIRILDI!</b>
+        # STEP 5: Send success confirmation
+        success_text = f"""✅ <b>KINO MUVAFFAQIYATLI O'CHIRILDI!</b>
 
-🎬 <b>O'chirilgan kino:</b>
+🗑 <b>O'chirilgan kino:</b>
 • Kod: <code>{movie_code}</code>
-• Nom: {title}
+• Nomi: <b>{title}</b>
+• Hajm: <code>{size_mb:.1f} MB</code>
 
 💾 <b>O'chirish holati:</b>
-• JSON file: <code>✅ O'chirildi</code>
+• JSON fayl: <code>✅ O'chirildi</code>
 • MongoDB: <code>{mongodb_status}</code>
 • Backup: <code>✅ Saqlanib qoldi</code>
 
@@ -7414,13 +7462,23 @@ def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
                     {'text': '🎬 KINO BOSHQARUVI', 'callback_data': 'movies_admin'}
                 ],
                 [
+                    {'text': '📋 KINOLAR RO\'YXATI', 'callback_data': 'admin_movies_list'},
                     {'text': '👑 ADMIN PANEL', 'callback_data': 'admin_main'}
                 ]
             ]
         }
         
-        send_message(chat_id, text, keyboard)
+        send_message(chat_id, success_text, keyboard)
         answer_callback_query(callback_id, f"✅ {movie_code} muvaffaqiyatli o'chirildi!")
+        logger.info(f"🎉 DELETION COMPLETED: {movie_code} - {title} successfully deleted by admin {user_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Delete confirm error: {e}")
+        answer_callback_query(callback_id, "❌ O'chirishda xatolik!", True)
+        try:
+            send_message(chat_id, f"❌ Kino o'chirishda xatolik: {str(e)}")
+        except:
+            pass
         
     except Exception as e:
         logger.error(f"❌ Confirm delete movie error: {e}")
