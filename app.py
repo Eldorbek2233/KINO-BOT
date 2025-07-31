@@ -976,6 +976,7 @@ def is_spam_message(message):
             elif spam_data.get('blocked', False):
                 logger.warning(f"🚫 BLOCKED USER {user_id} attempted to send message: {text[:50]}")
                 return True
+    
         
         # 🚫 CRYPTO SCAM KEYWORDS - Block cryptocurrency spam
         crypto_spam_keywords = [
@@ -1545,6 +1546,134 @@ def handle_message(message):
             except Exception as test_error:
                 logger.error(f"❌ Test my spam error: {test_error}")
                 send_message(chat_id, f"❌ Test error: {str(test_error)}")
+        elif text == '/cleanspam' and user_id == ADMIN_ID:
+            # Clean all spam tracker data
+            try:
+                spam_count = len(spam_tracker)
+                spam_tracker.clear()
+                
+                result_text = f"""🧹 <b>SPAM MA'LUMOTLARI TOZALANDI</b>
+
+📊 <b>Natijalar:</b>
+• Tozalangan spam yozuvlari: <code>{spam_count}</code> ta
+• Spam tracker holati: <code>Bo'sh</code>
+• Bloklangan foydalanuvchilar: <code>Reset</code>
+
+✅ <b>Barcha spam ma'lumotlari tozalandi!</b>
+🔄 <b>Barcha foydalanuvchilar uchun spam himoya reset qilindi.</b>
+
+💡 <b>Endi barcha foydalanuvchilar uchun spam tekshiruv qaytadan boshlanadi.</b>"""
+
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🛡️ Spam Himoya', 'callback_data': 'spam_protection_log'},
+                            {'text': '🧪 Spam Test', 'callback_data': 'test_spam_filter'}
+                        ],
+                        [
+                            {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, result_text, keyboard)
+                logger.info(f"✅ Admin {user_id} cleaned spam tracker: {spam_count} entries removed")
+                
+            except Exception as clean_error:
+                logger.error(f"❌ Clean spam error: {clean_error}")
+                send_message(chat_id, f"❌ Spam tozalashda xatolik: {str(clean_error)}")
+        elif text == '/resetspam' and user_id == ADMIN_ID:
+            # Reset spam protection system completely
+            try:
+                spam_count = len(spam_tracker)
+                
+                # Clear all spam data
+                spam_tracker.clear()
+                
+                # Reset spam protection variables to default (without global declaration since they're module-level)
+                result_text = f"""🔄 <b>SPAM HIMOYA TIZIMI RESET QILINDI</b>
+
+📊 <b>Reset ma'lumotlari:</b>
+• Tozalangan spam tracker: <code>{spam_count}</code> ta yozuv
+• Spam limit: <code>{SPAM_LIMIT}</code> ta urinish
+• Spam window: <code>{SPAM_WINDOW // 3600}</code> soat
+• Himoya holati: <code>✅ Faol</code>
+
+🛡️ <b>Spam himoya tizimi to'liq qayta ishga tushirildi!</b>
+
+💡 <b>Barcha foydalanuvchilar uchun spam himoya qaytadan faollashtirildi.</b>"""
+
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🧪 Spam Test', 'callback_data': 'test_spam_filter'},
+                            {'text': '📊 Spam Stats', 'callback_data': 'spam_protection_log'}
+                        ],
+                        [
+                            {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, result_text, keyboard)
+                logger.info(f"✅ Admin {user_id} reset spam protection system: {spam_count} entries cleared")
+                
+            except Exception as reset_error:
+                logger.error(f"❌ Reset spam error: {reset_error}")
+                send_message(chat_id, f"❌ Spam reset qilishda xatolik: {str(reset_error)}")
+        elif text == '/spamhelp' and user_id == ADMIN_ID:
+            # Show spam protection help and commands
+            try:
+                result_text = f"""🛡️ <b>SPAM HIMOYA YORDAM</b>
+
+📋 <b>Mavjud buyruqlar:</b>
+
+🔧 <b>Asosiy buyruqlar:</b>
+• <code>/spamstats</code> - Spam himoya statistikasi
+• <code>/testspam</code> - Spam filter test qilish
+• <code>/spamlist</code> - Bloklangan foydalanuvchilar
+• <code>/testmyspam</code> - Real spam test misollar
+
+🧹 <b>Tozalash buyruqlari:</b>
+• <code>/cleanspam</code> - Spam tracker tozalash
+• <code>/resetspam</code> - Spam tizimni to'liq reset qilish
+• <code>/checkspam [text]</code> - Matnni spam tekshirish
+
+📊 <b>Hozirgi holat:</b>
+• Spam tracker: <code>{len(spam_tracker)}</code> ta yozuv
+• Spam limit: <code>{SPAM_LIMIT}</code> ta urinish
+• Spam window: <code>{SPAM_WINDOW // 3600}</code> soat
+• Himoya: <code>✅ Faol</code>
+
+🎯 <b>Spam turlari:</b>
+• 🪙 Cryptocurrency scams
+• 📢 Telegram spam
+• 🔗 Suspicious URLs
+• 📨 Forwarded spam
+• 🎭 Emoji spam
+• 📢 ALL CAPS spam
+
+💡 <b>Spam xabarlar silent block qilinadi (javob berilmaydi).</b>"""
+
+                keyboard = {
+                    'inline_keyboard': [
+                        [
+                            {'text': '🧹 Spam Tozalash', 'callback_data': 'clean_spam_list'},
+                            {'text': '🔄 Tizim Reset', 'callback_data': 'reset_spam_system'}
+                        ],
+                        [
+                            {'text': '🛡️ Spam Himoya', 'callback_data': 'spam_protection_log'},
+                            {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                        ]
+                    ]
+                }
+                
+                send_message(chat_id, result_text, keyboard)
+                logger.info(f"✅ Admin {user_id} viewed spam help")
+                
+            except Exception as help_error:
+                logger.error(f"❌ Spam help error: {help_error}")
+                send_message(chat_id, f"❌ Spam yordam xatolik: {str(help_error)}")
         elif text.startswith('/checkspam ') and user_id == ADMIN_ID:
             # Check if specific text would be detected as spam
             try:
@@ -2657,6 +2786,7 @@ def handle_admin_panel(chat_id, user_id):
 • 🎬 Jami kinolar: <code>{len(movies_db)}</code>
 • 📺 Majburiy kanallar: <code>{len(channels_db)}</code>
 • 📱 Faol sessiyalar: <code>{len(upload_sessions) + len(broadcast_sessions)}</code>
+• 🛡️ Spam tracker: <code>{len(spam_tracker)}</code> ta
 
 ⚙️ <b>Boshqaruv paneli:</b>"""
 
@@ -3961,6 +4091,8 @@ def handle_admin_callbacks(chat_id, user_id, data, callback_id):
             'test_spam_filter': lambda: handle_test_spam_filter(chat_id, user_id, callback_id),
             'spam_protection_log': lambda: handle_spam_protection_log(chat_id, user_id),
             'clear_spam_list': lambda: handle_clear_spam_list(chat_id, user_id, callback_id),
+            'clean_spam_list': lambda: handle_clean_spam_tracker(chat_id, user_id, callback_id),
+            'reset_spam_system': lambda: handle_reset_spam_system(chat_id, user_id, callback_id),
             
             # Data management callbacks
             'reload_data': lambda: handle_reload_data(chat_id, user_id, callback_id),
@@ -9240,6 +9372,10 @@ def handle_spam_protection_log(chat_id, user_id):
                     {'text': '📊 System Stats', 'callback_data': 'system_admin'}
                 ],
                 [
+                    {'text': '🧹 Spam Tozalash', 'callback_data': 'clean_spam_list'},
+                    {'text': '🔄 Tizim Reset', 'callback_data': 'reset_spam_system'}
+                ],
+                [
                     {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
                 ]
             ]
@@ -9387,6 +9523,92 @@ def handle_cancel_delete_session(chat_id, user_id, callback_id):
     except Exception as e:
         logger.error(f"❌ Cancel delete session error: {e}")
         answer_callback_query(callback_id, "❌ Xatolik!", True)
+
+def handle_clean_spam_tracker(chat_id, user_id, callback_id):
+    """Clean spam tracker data via callback"""
+    try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+        
+        spam_count = len(spam_tracker)
+        spam_tracker.clear()
+        
+        result_text = f"""🧹 <b>SPAM TRACKER TOZALANDI</b>
+
+📊 <b>Tozalash natijalari:</b>
+• Tozalangan yozuvlar: <code>{spam_count}</code> ta
+• Spam tracker: <code>Bo'sh</code>
+• Bloklangan users: <code>Reset</code>
+
+✅ <b>Barcha spam ma'lumotlari tozalandi!</b>
+
+💡 <b>Endi barcha foydalanuvchilar uchun spam himoya qaytadan boshlanadi.</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🔄 Tizim Reset', 'callback_data': 'reset_spam_system'},
+                    {'text': '🧪 Spam Test', 'callback_data': 'test_spam_filter'}
+                ],
+                [
+                    {'text': '🛡️ Spam Himoya', 'callback_data': 'spam_protection_log'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, result_text, keyboard)
+        answer_callback_query(callback_id, f"✅ {spam_count} ta spam tozalandi!")
+        logger.info(f"✅ Admin {user_id} cleaned spam tracker via callback: {spam_count} entries")
+        
+    except Exception as e:
+        logger.error(f"❌ Clean spam tracker error: {e}")
+        answer_callback_query(callback_id, "❌ Tozalashda xatolik!", True)
+
+def handle_reset_spam_system(chat_id, user_id, callback_id):
+    """Reset entire spam protection system via callback"""
+    try:
+        if user_id != ADMIN_ID:
+            answer_callback_query(callback_id, "❌ Admin huquqi kerak!", True)
+            return
+        
+        spam_count = len(spam_tracker)
+        
+        # Clear all spam data
+        spam_tracker.clear()
+        
+        # Reset spam protection variables (module-level constants)
+        result_text = f"""🔄 <b>SPAM TIZIMI RESET QILINDI</b>
+
+📊 <b>Reset ma'lumotlari:</b>
+• Tozalangan tracker: <code>{spam_count}</code> ta
+• Spam limit: <code>{SPAM_LIMIT}</code> ta urinish  
+• Spam window: <code>{SPAM_WINDOW // 3600}</code> soat
+• Himoya holati: <code>✅ Faol</code>
+
+🛡️ <b>Spam himoya tizimi to'liq qayta ishga tushdi!</b>
+
+💡 <b>Barcha foydalanuvchilar uchun spam himoya qaytadan faollashtirildi.</b>"""
+
+        keyboard = {
+            'inline_keyboard': [
+                [
+                    {'text': '🧪 Spam Test', 'callback_data': 'test_spam_filter'},
+                    {'text': '📊 Spam Stats', 'callback_data': 'spam_protection_log'}
+                ],
+                [
+                    {'text': '👑 Admin Panel', 'callback_data': 'admin_main'}
+                ]
+            ]
+        }
+        
+        send_message(chat_id, result_text, keyboard)
+        answer_callback_query(callback_id, "🔄 Spam tizimi reset qilindi!")
+        logger.info(f"✅ Admin {user_id} reset spam system via callback: {spam_count} entries cleared")
+        
+    except Exception as e:
+        logger.error(f"❌ Reset spam system error: {e}")
+        answer_callback_query(callback_id, "❌ Reset qilishda xatolik!", True)
 
 def handle_confirm_delete_movie(chat_id, user_id, movie_code, callback_id):
     """Confirm and delete specific movie"""
