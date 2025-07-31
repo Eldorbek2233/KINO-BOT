@@ -1,76 +1,130 @@
 # Copilot Instructions for Kino Bot
 
-## Overview
-Kino Bot is a Telegram bot designed to manage and share movie files. It includes features for user management, file handling, and admin-specific functionalities. The bot is built using Python and the `python-telegram-bot` library.
+## Architecture Overview
+This is a **Flask-based Telegram webhook bot** with a monolithic `app.py` architecture (9700+ lines). The bot uses **direct HTTP requests** to Telegram API rather than python-telegram-bot library.
 
-## Architecture
-- **Main Components**:
-  - `bot.py`: Entry point of the application. Sets up the bot, handlers, and commands.
-  - `handlers.py`: Contains all the bot's command and message handlers.
-  - `config.py`: Stores configuration variables like `TOKEN` and `ADMIN_ID`.
-  - `file_ids.json`: JSON database for storing movie file IDs.
-- **Data Flow**:
-  - User interactions are processed by handlers in `handlers.py`.
-  - Admin-specific commands and menus are managed using `ADMIN_ID`.
-  - File IDs are stored and retrieved from `file_ids.json`.
+### Core Components
+- **`app.py`**: Main application - Flask server + all bot logic (webhook handler, message processing, admin commands)
+- **`config.py`**: Environment-based configuration with TOKEN/ADMIN_ID fallbacks
+- **Data Storage**: Dual-persistence with MongoDB + JSON files (`file_ids.json`, `channels.json`, `users.json`)
+- **Session Management**: In-memory dictionaries (`upload_sessions`, `channels_db`, `movies_db`, `subscription_cache`)
 
-## Developer Workflows
-### Running the Bot
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Run the bot:
-   ```bash
-   python bot.py
-   ```
+### Key Data Flow
+1. **Webhook**: `/webhook` route receives Telegram updates → `handle_message()` 
+2. **Session Handling**: Admin interactions use `upload_sessions` for multi-step workflows (movie deletion, channel management)
+3. **Spam Protection**: `is_spam_message()` with keyword detection + silent blocking
+4. **Subscription System**: `check_all_subscriptions()` with cached results (`subscription_cache`)
 
-### Debugging
-- Use `print` statements in handlers to log user interactions and debug issues.
-- Check the `file_ids.json` file for stored movie codes and IDs.
+## Critical Developer Workflows
 
-### Testing
-- Manually test commands like `/start`, `/stat`, and `/admin_menu`.
-- Verify admin-specific functionalities using the `ADMIN_ID`.
-
-## Project-Specific Conventions
-- **Command Handlers**:
-  - All commands are defined in `handlers.py`.
-  - Use `CommandHandler` for slash commands and `MessageHandler` for text-based interactions.
-- **Admin-Specific Features**:
-  - Admin functionalities are restricted using `ADMIN_ID`.
-  - Admin menus use `InlineKeyboardMarkup` for navigation.
-- **File Management**:
-  - Movie file IDs are stored in `file_ids.json`.
-  - Use `save_file_id` and `load_file_ids` functions for file ID management.
-
-## Integration Points
-- **Telegram API**:
-  - The bot interacts with Telegram using the `python-telegram-bot` library.
-  - Commands and messages are processed using `Application`, `CommandHandler`, and `MessageHandler`.
-- **JSON Database**:
-  - `file_ids.json` is used to store and retrieve movie file IDs.
-
-## Examples
-### Adding a New Command
-1. Define the handler in `handlers.py`:
-   ```python
-   async def new_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-       await update.message.reply_text("This is a new command!")
-   ```
-2. Register the command in `bot.py`:
-   ```python
-   app.add_handler(CommandHandler("new_command", new_command))
-   ```
-
-### Saving a File ID
-Use the `save_file_id` function in `handlers.py`:
-```python
-save_file_id("movie_code", "file_id")
+### Running Locally
+```bash
+python app.py  # Starts Flask server on port 8080
 ```
 
-## Notes
-- Ensure `ADMIN_ID` is set correctly in `config.py`.
-- Update `requirements.txt` if new dependencies are added.
+### Deployment (Multiple Platforms)
+- **Railway**: Use `railway_config.py` for environment detection
+- **Render**: Auto-detects via `RENDER_EXTERNAL_URL` environment variable  
+- **Testing**: Multiple test files (`test_*.py`) for different components
 
-Feel free to suggest updates or clarify any sections!
+### Debugging Patterns
+```python
+logger.info(f"🔍 Debug info: {variable}")  # Use emoji prefixes consistently
+# Check session state: upload_sessions[user_id]
+# Monitor cache: subscription_cache[user_id]
+```
+
+## Project-Specific Conventions
+
+### Message Handling Pattern
+```python
+def handle_message(message):
+    # 1. Extract data: chat_id, user_id, text
+    # 2. Spam check (non-admin only)
+    # 3. Subscription check (cached)
+    # 4. Session handling (upload/broadcast)
+    # 5. Command routing
+```
+
+### Admin Command Structure
+- All admin commands check `user_id == ADMIN_ID`
+- Admin commands start with `/` and have extensive inline keyboard menus
+- Session-based workflows for complex operations (movie deletion, channel management)
+
+### Database Pattern (Dual Persistence)
+```python
+# Always update both MongoDB and JSON
+movies_db[code] = movie_data  # Memory
+save_movie_to_mongodb(movie_data)  # MongoDB
+auto_save_data()  # JSON files
+```
+
+### Cache Management
+```python
+# Subscription cache with expiration
+subscription_cache[user_id] = {
+    'is_subscribed': True,
+    'expires': time.time() + CACHE_DURATION,
+    'last_check': time.time()
+}
+```
+
+## Integration Points
+
+### Telegram API (Direct HTTP)
+- `send_message()`, `send_video()`: Custom HTTP request functions
+- No external Telegram library - direct API calls with `requests`
+- Webhook-based, not polling
+
+### MongoDB Integration
+- Fallback architecture: MongoDB preferred, JSON files as backup
+- Connection check: `is_mongodb_available()`
+- Auto-retry and graceful degradation
+
+### Platform Detection
+```python
+# Render.com detection
+if os.getenv('RENDER_EXTERNAL_URL'):
+    # Render-specific configuration
+    
+# Railway detection  
+try:
+    from railway_config import get_token
+    # Railway-specific configuration
+```
+
+## Session Management Patterns
+
+### Upload Sessions (Movie Deletion)
+```python
+upload_sessions[user_id] = {
+    'action': 'delete_movies',
+    'stage': 'waiting_for_movie_code',
+    'timestamp': datetime.now().isoformat()
+}
+```
+
+### Cache Invalidation
+```python
+# Channel changes require cache clear
+invalidate_subscription_cache()  # Clears all user subscription cache
+```
+
+## Testing & Debugging
+
+### Test Files by Purpose
+- `test_complete_bot.py`: Full system test
+- `test_movie_deletion.py`: Movie management tests
+- `test_subscription.py`: Channel subscription tests  
+- `fix_*.py`: Repair/diagnostic scripts
+
+### Admin Debug Commands
+- `/spamstats`: Spam protection status
+- `/debugchannels`: Channel configuration debug
+- `/clearcache`: Clear subscription cache
+
+## Multi-Environment Considerations
+- **Development**: Uses JSON files primarily
+- **Production**: MongoDB + JSON backup
+- **Cloud Deploy**: Auto-detects platform (Railway/Render) via environment variables
+- **Keep-Alive**: Anti-sleep system for free hosting tiers

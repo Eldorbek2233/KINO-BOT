@@ -1099,6 +1099,26 @@ def handle_message(message):
         
         logger.info(f"🔍 Processing message: chat_id={chat_id}, user_id={user_id}, text='{text[:50]}'")
         
+        # CRITICAL DEBUG: Check admin status
+        if user_id == ADMIN_ID:
+            logger.info(f"👑 ADMIN MESSAGE: {user_id} -> '{text}'")
+            
+            # Check if admin has active upload session
+            if user_id in upload_sessions:
+                session = upload_sessions[user_id]
+                logger.info(f"📋 ADMIN SESSION ACTIVE: {session}")
+                
+                # IMMEDIATE PROCESSING for delete sessions
+                if session.get('type') == 'delete_movie':
+                    logger.info(f"🗑 ADMIN DELETE SESSION: Processing '{text}' immediately")
+                    handle_upload_session(chat_id, message)
+                    return
+                else:
+                    handle_upload_session(chat_id, message)
+                    return
+            else:
+                logger.info(f"📋 ADMIN NO SESSION: Will process as command")
+        
         # 🛡️ SPAM PROTECTION - Check for spam content before any processing
         if user_id != ADMIN_ID and text:
             logger.info(f"🔍 SPAM CHECK: Checking message from user {user_id}: '{text[:50]}'")
@@ -1187,6 +1207,9 @@ def handle_message(message):
             handle_start_command(chat_id, user_id, user_info)
         elif text == '/admin' and user_id == ADMIN_ID:
             handle_admin_panel(chat_id, user_id)
+        elif text == '/delete' and user_id == ADMIN_ID:
+            logger.info(f"🗑 ADMIN DELETE COMMAND: {user_id} requested movie deletion menu")
+            handle_delete_movies_menu_impl(chat_id)
         elif text == '/stats' and user_id == ADMIN_ID:
             handle_statistics(chat_id, user_id)
         elif text.startswith('/addchannel') and user_id == ADMIN_ID:
