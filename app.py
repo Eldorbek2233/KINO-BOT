@@ -9699,7 +9699,7 @@ if __name__ == "__main__":
         # Initialize bot first
         initialize_bot()
         
-        # Start Flask server with Railway config
+        # Production WSGI Server Setup
         try:
             port = get_port()
         except:
@@ -9708,11 +9708,34 @@ if __name__ == "__main__":
         logger.info(f"🚂 Professional Kino Bot starting on Railway port {port}")
         logger.info(f"📊 Database: MongoDB {'✅' if is_mongodb_available() else '❌'} + JSON backup ✅")
         
-        app.run(
-            host='0.0.0.0',
-            port=port,
-            debug=False,
-            threaded=True
+        # Check if we're in production environment
+        is_production = (
+            os.getenv('RENDER_EXTERNAL_URL') or 
+            os.getenv('RAILWAY_ENVIRONMENT') or 
+            os.getenv('HEROKU_APP_NAME') or
+            os.getenv('PRODUCTION', '').lower() == 'true'
         )
+        
+        if is_production:
+            # Use Waitress WSGI server for production
+            from waitress import serve
+            logger.info(f"🔧 Starting production WSGI server with Waitress on port {port}")
+            serve(
+                app,
+                host='0.0.0.0',
+                port=port,
+                threads=4,
+                cleanup_interval=30,
+                channel_timeout=120
+            )
+        else:
+            # Use Flask development server for local testing
+            logger.info(f"🛠️ Starting development server on port {port}")
+            app.run(
+                host='0.0.0.0',
+                port=port,
+                debug=True,
+                threaded=True
+            )
     except Exception as e:
         logger.error(f"❌ Bot startup error: {e}")
