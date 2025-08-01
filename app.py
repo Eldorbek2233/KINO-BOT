@@ -37,7 +37,7 @@ try:
     logger.info("🚂 Railway configuration loaded successfully")
 except ImportError:
     # Fallback configuration
-    TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk")
+    TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAGf_E9GxjYmopmzqRU5dF_7nw2GSjU0Iec")
     ADMIN_ID = int(os.getenv('ADMIN_ID', 5542016161))
     logger.info("🔧 Using fallback configuration")
 
