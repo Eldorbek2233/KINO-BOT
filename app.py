@@ -2238,6 +2238,12 @@ def handle_callback_query(callback_query):
             handle_upload_menu(chat_id, user_id)
         elif data == 'broadcast_menu':
             handle_broadcast_menu(chat_id, user_id)
+        elif data == 'broadcast_text':
+            handle_broadcast_start(chat_id, user_id, 'text', callback_id)
+        elif data == 'broadcast_photo':
+            handle_broadcast_start(chat_id, user_id, 'photo', callback_id)
+        elif data == 'broadcast_video':
+            handle_broadcast_start(chat_id, user_id, 'video', callback_id)
         elif data == 'channels_menu':
             handle_channels_menu(chat_id, user_id)
         elif data == 'users_menu':
@@ -3715,52 +3721,6 @@ def handle_help_admin(chat_id, user_id):
         send_message(chat_id, "❌ Admin yordam tizimida xatolik!")
 
 # Additional admin functions for complete functionality
-def handle_broadcast_menu(chat_id, user_id):
-    """Professional broadcast system"""
-    try:
-        if user_id != ADMIN_ID:
-            send_message(chat_id, "❌ Admin huquqi kerak!")
-            return
-        
-        text = """🎯 <b>PROFESSIONAL REKLAMA TIZIMI</b>
-
-📢 <b>Reklama turlari:</b>
-• 📝 Matn xabari
-• 🖼 Rasm bilan
-• 🎬 Video bilan
-• 🔗 Havola bilan
-
-⚙️ <b>Professional funksiyalar:</b>
-• Vaqt rejalashtirish
-• Guruh bo'yicha yuborish
-• Statistika kuzatuv
-• Muvaffaqiyat hisoboti
-
-📝 <b>Reklama matnini yuboring:</b>"""
-
-        keyboard = {
-            'inline_keyboard': [
-                [
-                    {'text': '📊 Reklama tarixi', 'callback_data': 'broadcast_history'},
-                    {'text': '⏰ Rejalashgan', 'callback_data': 'scheduled_broadcasts'}
-                ],
-                [
-                    {'text': '👥 Test guruh', 'callback_data': 'test_broadcast'},
-                    {'text': '🎯 Maqsadli guruh', 'callback_data': 'targeted_broadcast'}
-                ],
-                [
-                    {'text': '🔙 Admin Panel', 'callback_data': 'admin_main'}
-                ]
-            ]
-        }
-        
-        broadcast_sessions[user_id] = {'status': 'waiting_content', 'start_time': datetime.now().isoformat()}
-        send_message(chat_id, text, keyboard)
-        
-    except Exception as e:
-        logger.error(f"❌ Broadcast menu error: {e}")
-        send_message(chat_id, "❌ Reklama tizimida xatolik!")
-
 def handle_channels_menu(chat_id, user_id):
     """Professional channel management system"""
     try:
@@ -4721,7 +4681,7 @@ def handle_broadcast_session(chat_id, message):
         if not session:
             return
         
-        if session['status'] == 'waiting_content':
+        if session['step'] == 'waiting_content':
             # Store the broadcast content
             text = message.get('text', '')
             photo = message.get('photo')
@@ -4744,7 +4704,7 @@ def handle_broadcast_session(chat_id, message):
                 })
             
             session.update({
-                'status': 'confirming',
+                'step': 'confirming',
                 'content': broadcast_content
             })
             
@@ -4802,7 +4762,7 @@ def handle_photo_upload(chat_id, message):
         
         if user_id == ADMIN_ID:
             session = broadcast_sessions.get(user_id)
-            if session and session.get('status') == 'waiting_content':
+            if session and session.get('step') == 'waiting_content':
                 handle_broadcast_session(chat_id, message)
                 return
         
@@ -6934,7 +6894,7 @@ def handle_broadcast_confirmation(chat_id, user_id, callback_id):
     """Handle broadcast confirmation"""
     try:
         session = broadcast_sessions.get(user_id)
-        if not session or session.get('status') != 'confirming':
+        if not session or session.get('step') != 'confirming':
             answer_callback_query(callback_id, "❌ Session expired!", True)
             return
         
@@ -6944,21 +6904,29 @@ def handle_broadcast_confirmation(chat_id, user_id, callback_id):
         success_count = 0
         failed_count = 0
         
-        for target_user_id in users_db:
+        logger.info(f"📣 Starting broadcast to {len(users_db)} users")
+        
+        for i, target_user_id in enumerate(users_db):
             try:
+                success = False
                 if content['type'] == 'text':
-                    success = send_message(int(target_user_id), content['text'])
+                    result = send_message(int(target_user_id), content['text'])
+                    success = result is not None
                 elif content['type'] == 'photo':
-                    success = send_photo(int(target_user_id), content['photo'], content['text'])
+                    result = send_photo(int(target_user_id), content['photo'], content['text'])
+                    success = result is not None
                 elif content['type'] == 'video':
-                    success = send_video(int(target_user_id), content['video'], content['text'])
-                else:
-                    success = False
+                    result = send_video(int(target_user_id), content['video'], content['text'])
+                    success = result is not None
                 
                 if success:
                     success_count += 1
                 else:
                     failed_count += 1
+                
+                # Rate limiting: small delay every 30 messages to avoid Telegram limits
+                if (i + 1) % 30 == 0:
+                    time.sleep(1)
                     
             except Exception as e:
                 logger.error(f"Broadcast failed for user {target_user_id}: {e}")
@@ -9276,7 +9244,7 @@ def handle_photo_upload(chat_id, message):
         # Check if in broadcast session
         if user_id in broadcast_sessions:
             session = broadcast_sessions[user_id]
-            if session.get('status') == 'waiting_content':
+            if session.get('step') == 'waiting_content':
                 photo = message.get('photo', [])
                 if photo:
                     largest_photo = max(photo, key=lambda x: x.get('file_size', 0))
@@ -9285,7 +9253,7 @@ def handle_photo_upload(chat_id, message):
                         'file_id': largest_photo.get('file_id'),
                         'caption': message.get('caption', '')
                     }
-                    session['status'] = 'ready_to_send'
+                    session['step'] = 'ready_to_send'
                     
                     text = """🖼 <b>RASM QABUL QILINDI!</b>
 
