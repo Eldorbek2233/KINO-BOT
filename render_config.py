@@ -6,22 +6,19 @@ Token va muhit o'zgaruvchilarini to'g'ri boshqarish uchun
 
 import os
 
-# Render da ishlash uchun hardcoded token
-RENDER_BOT_TOKEN = "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
+# Render environment variables only - no hardcoded credentials
 RENDER_ADMIN_ID = 5542016161
 
 def get_token():
-    """Token ni olish - Render da ishlash uchun"""
-    # Birinchi environment variable dan
+    """Token ni olish - faqat environment variable dan"""
+    # Faqat environment variable dan
     token = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
     
-    # Agar topilmasa, hardcoded ishlatamiz
+    # Agar topilmasa, xatolik berish
     if not token or token == "None" or len(str(token)) < 30:
-        token = RENDER_BOT_TOKEN
-        print(f"🎭 Using hardcoded token for Render: {token[:15]}...")
-    else:
-        print(f"🎭 Using env token on Render: {token[:15]}...")
+        raise ValueError("BOT_TOKEN environment variable not found or invalid")
     
+    print(f"🎭 Using env token on Render: {token[:15]}...")
     return token
 
 def get_admin_id():

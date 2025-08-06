@@ -4,12 +4,12 @@ from dotenv import load_dotenv
 # .env faylidan o'zgaruvchilarni yuklab olish
 load_dotenv()
 
-# Bot token - environment variable yoki hardcoded fallback
-TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TOKEN") or "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
+# Bot token - faqat environment variable dan
+TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
 
-# Agar TOKEN hali ham None bo'lsa, to'g'ridan-to'g'ri o'rnataylik
+# Token mavjudligini tekshirish
 if not TOKEN or TOKEN == "None" or len(TOKEN) < 30:
-    TOKEN = "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
+    raise ValueError("BOT_TOKEN environment variable not found or invalid. Please set BOT_TOKEN in your environment.")
 
 # O'zgaruvchilarni olish
 ADMIN_ID = int(os.getenv("ADMIN_ID", "5542016161"))  # Fallback admin ID

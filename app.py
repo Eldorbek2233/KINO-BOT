@@ -36,13 +36,18 @@ try:
     ADMIN_ID = get_admin_id()
     logger.info("🚂 Railway configuration loaded successfully")
 except ImportError:
-    # Fallback configuration
-    TOKEN = os.getenv('BOT_TOKEN', "8177519032:AAGf_E9GxjYmopmzqRU5dF_7nw2GSjU0Iec")
+    # Fallback configuration - using environment variables only
+    TOKEN = os.getenv('BOT_TOKEN')
     ADMIN_ID = int(os.getenv('ADMIN_ID', 5542016161))
-    logger.info("🔧 Using fallback configuration")
+    if not TOKEN:
+        logger.error("❌ BOT_TOKEN environment variable not set!")
+        raise ValueError("BOT_TOKEN is required but not found in environment variables")
+    logger.info("🔧 Using environment variables configuration")
 
-# MongoDB Configuration
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster')
+# MongoDB Configuration - using environment variables only
+MONGODB_URI = os.getenv('MONGODB_URI')
+if not MONGODB_URI:
+    logger.warning("⚠️ MONGODB_URI not set - running without MongoDB")
 DB_NAME = os.getenv('DB_NAME', 'kinobot')
 
 # MongoDB Connection
