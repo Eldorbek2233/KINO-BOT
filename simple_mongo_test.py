@@ -17,7 +17,7 @@ def test_connection():
         logger.info("🔄 MongoDB ulanish testi boshlandi...")
         
         # Connection string
-        uri = "mongodb+srv://eldorbekxakimxujayev4:Ali11042004@cluster0.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority"
+        uri = "mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster"
         
         logger.info(f"URI: {uri}")
         

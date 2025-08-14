@@ -45,7 +45,7 @@ except ImportError:
     logger.info("🔧 Using environment variables configuration")
 
 # MongoDB Configuration with new credentials
-MONGODB_URI = "mongodb+srv://kinobot_db:Complex2025Pass!@kinobot-cluster.urisldy.mongodb.net/?retryWrites=true&w=majority"
+MONGODB_URI = "mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster"
 DB_NAME = 'kinobot'
 
 if not MONGODB_URI:
