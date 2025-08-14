@@ -14,8 +14,8 @@ def test_mongodb_connection():
     print("🧪 MONGODB CONNECTION TEST")
     print("=" * 50)
     
-    # Production MongoDB URI
-    test_uri = "mongodb+srv://eldorbekxakimxujayev4:7cszqUNVfQ6TPGz2@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster"
+    # New MongoDB URI with updated credentials
+    test_uri = "mongodb+srv://kinobot_db:Complex2025Pass!@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority"
     
     print(f"📝 Connection String: {test_uri[:50]}...")
     

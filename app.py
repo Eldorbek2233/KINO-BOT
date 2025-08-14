@@ -44,8 +44,8 @@ except ImportError:
         raise ValueError("BOT_TOKEN is required but not found in environment variables")
     logger.info("🔧 Using environment variables configuration")
 
-# MongoDB Configuration with production URI
-MONGODB_URI = "mongodb+srv://eldorbekxakimxujayev4:7cszqUNVfQ6TPGz2@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster"
+# MongoDB Configuration with new credentials
+MONGODB_URI = "mongodb+srv://kinobot_db:Complex2025Pass!@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority"
 DB_NAME = 'kinobot'
 
 if not MONGODB_URI:
