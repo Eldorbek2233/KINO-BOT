@@ -44,28 +44,43 @@ except ImportError:
         raise ValueError("BOT_TOKEN is required but not found in environment variables")
     logger.info("🔧 Using environment variables configuration")
 
-# MongoDB Configuration - using environment variables only
-MONGODB_URI = os.getenv('MONGODB_URI')
+# MongoDB Configuration with production URI
+MONGODB_URI = "mongodb+srv://eldorbekxakimxujayev4:7cszqUNVfQ6TPGz2@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster"
+DB_NAME = 'kinobot'
+
 if not MONGODB_URI:
     logger.warning("⚠️ MONGODB_URI not set - running without MongoDB")
-DB_NAME = os.getenv('DB_NAME', 'kinobot')
+else:
+    logger.info(f"📊 Using MongoDB URI: {MONGODB_URI[:50]}...")
 
 # MongoDB Connection
 mongo_client = None
 mongo_db = None
 
 def init_mongodb():
-    """Initialize MongoDB connection"""
+    """Initialize MongoDB connection with improved error handling"""
     global mongo_client, mongo_db
     try:
-        if not MONGODB_URI or MONGODB_URI.startswith('mongodb+srv://username:password'):
+        if not MONGODB_URI:
             logger.warning("⚠️ MongoDB URI not configured, using file storage")
             return False
             
-        mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        # Create MongoDB client with very high timeouts for initial connection
+        mongo_client = MongoClient(MONGODB_URI, 
+                                 serverSelectionTimeoutMS=30000,
+                                 connectTimeoutMS=30000,
+                                 socketTimeoutMS=30000,
+                                 retryWrites=True)
+        
         # Test connection
         mongo_client.admin.command('ping')
         mongo_db = mongo_client[DB_NAME]
+        
+        # Verify database connection
+        mongo_db.list_collection_names()
+        
+        logger.info("✅ MongoDB connection successful!")
+        logger.info(f"📊 Connected to database: {DB_NAME}")
         
         # Create indexes for better performance
         mongo_db.movies.create_index("code", unique=True)

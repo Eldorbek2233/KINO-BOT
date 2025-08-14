@@ -14,16 +14,20 @@ def test_mongodb_connection():
     print("🧪 MONGODB CONNECTION TEST")
     print("=" * 50)
     
-    # Test connection string (replace YOUR_PASSWORD with real password)
-    test_uri = "mongodb+srv://eldorbekxakimxujayev4:YOUR_PASSWORD@kinobot-cluster.quzswqg.mongodb.net/kinobot?retryWrites=true&w=majority&appName=kinobot-cluster"
+    # Production MongoDB URI
+    test_uri = "mongodb+srv://eldorbekxakimxujayev4:7cszqUNVfQ6TPGz2@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster"
     
     print(f"📝 Connection String: {test_uri[:50]}...")
     
     try:
         print("\n🔄 Connecting to MongoDB...")
         
-        # Create client with timeout
-        client = MongoClient(test_uri, serverSelectionTimeoutMS=10000)
+        # Create client with basic settings
+        client = MongoClient(
+            test_uri,
+            serverSelectionTimeoutMS=5000,
+            connect=True
+        )
         
         # Test connection
         client.admin.command('ping')
