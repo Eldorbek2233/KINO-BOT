@@ -15,7 +15,7 @@ def test_mongodb_connection():
     print("=" * 50)
     
     # New MongoDB URI with updated credentials
-    test_uri = "mongodb+srv://kinobot_db:Complex2025Pass!@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority"
+    test_uri = "mongodb+srv://eldorbekxakimxujayev4:Ali11042004@kinobot-cluster.quzswqg.mongodb.net/?retryWrites=true&w=majority&appName=kinobot-cluster"
     
     print(f"📝 Connection String: {test_uri[:50]}...")
     
@@ -25,7 +25,9 @@ def test_mongodb_connection():
         # Create client with basic settings
         client = MongoClient(
             test_uri,
-            serverSelectionTimeoutMS=5000,
+            serverSelectionTimeoutMS=30000,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
             connect=True
         )
         
