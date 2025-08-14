@@ -4,7 +4,6 @@
 # Python cache
 __pycache__/
 *.pyc
-*.pyo
 
 # IDE files
 .vscode/
@@ -24,3 +23,5 @@ __pycache__/
 
 # User data
 users.json
+*.json
+*.json
