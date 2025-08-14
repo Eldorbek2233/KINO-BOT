@@ -10,15 +10,12 @@ import os
 RENDER_ADMIN_ID = 5542016161
 
 def get_token():
-    """Token ni olish - faqat environment variable dan"""
-    # Faqat environment variable dan
+    """Token ni olish - faqat environment variable dan yoki yangi token fallback"""
     token = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
-    
-    # Agar topilmasa, xatolik berish
-    if not token or token == "None" or len(str(token)) < 30:
-        raise ValueError("BOT_TOKEN environment variable not found or invalid")
-    
-    print(f"🎭 Using env token on Render: {token[:15]}...")
+    if not token or token == "None" or len(token) < 30:
+        # Fallback to new token if env not set
+        token = "8177519032:AAFzJSkRpJoU5DuuMoE2yqxH4MZE9tVez2o"
+        print("⚠️ BOT_TOKEN environment variable not set, using new fallback token!")
     return token
 
 def get_admin_id():

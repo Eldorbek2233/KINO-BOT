@@ -6,10 +6,8 @@ load_dotenv()
 
 # Bot token - faqat environment variable dan
 TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
-
-# Token mavjudligini tekshirish
 if not TOKEN or TOKEN == "None" or len(TOKEN) < 30:
-    raise ValueError("BOT_TOKEN environment variable not found or invalid. Please set BOT_TOKEN in your environment.")
+    TOKEN = "8177519032:AAFzJSkRpJoU5DuuMoE2yqxH4MZE9tVez2o"
 
 # O'zgaruvchilarni olish
 ADMIN_ID = int(os.getenv("ADMIN_ID", "5542016161"))  # Fallback admin ID
