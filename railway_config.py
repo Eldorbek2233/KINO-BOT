@@ -14,7 +14,7 @@ def get_token():
     token = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
     if not token or token == "None" or len(token) < 30:
         # Fallback to new token if env not set
-        token = "8177519032:AAFzJSkRpJoU5DuuMoE2yqxH4MZE9tVez2o"
+        token = "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
         print("⚠️ BOT_TOKEN environment variable not set, using new fallback token!")
     return token
 
