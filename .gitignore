@@ -1,27 +1,33 @@
-# Environment variables
+# Bot configuration
+config.py
+railway_config.py
 .env
 
-# Python cache
+# Database files
+*.json
+*.db
+*.sqlite3
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.env/
+.venv/
 
-# IDE files
-.vscode/
-.idea/
-
-# Local development
+# Logs
 *.log
+logs/
 
-# Keep JSON databases in version control for Render deployment
-# users.json
-# file_ids.json  
-# channels.json
-.idea/
+# IDE
 .vscode/
+.idea/
 *.swp
 *.swo
 
-# User data
-users.json
-*.json
-*.json
+# Operating System
+.DS_Store
+Thumbs.db

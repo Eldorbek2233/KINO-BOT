@@ -1,56 +1,56 @@
-# 🎭 Ultimate Professional Kino Bot V3.0
+# 🎭 Professional Kino Bot
 
-Telegram bot for movie sharing with advanced admin panel, mandatory channel subscription system, and **never-sleeping keep-alive technology**.
+Professional Telegram bot for movie management with advanced admin features.
 
-## 🚀 New Features
+## Features
 
-### 🔄 Keep-Alive System (Anti-Sleep)
-- **Internal Self-Ping**: Every 10 minutes automatic ping
-- **Multiple Endpoints**: `/ping`, `/health`, `/` for monitoring
-- **Thread-Safe**: Runs in background daemon thread  
-- **Render.com Optimized**: Prevents free tier sleeping
-- **Admin Monitoring**: Real-time system health dashboard
+- 🎬 Movie management system
+- 👑 Professional admin panel
+- 📢 Broadcasting system
+- 📺 Channel subscription system
+- 💾 MongoDB integration
+- 🔄 Auto-backup system
 
-### 📺 Mandatory Channel Subscription
-- **Force Join**: Users must join channels before using bot
-- **Admin Management**: Add/remove channels dynamically
-- **Auto-Check**: Automatic subscription verification
-- **Flexible Setup**: Support for multiple channels
+## Setup
 
-### 👑 Enhanced Admin Panel
-- **System Health**: Real-time monitoring dashboard
-- **Ping Testing**: Manual ping tests with response times
-- **Keep-Alive Status**: Monitor anti-sleep system
-- **Performance Metrics**: Response times and system stats
+1. Clone repository:
+```bash
+git clone https://github.com/YOUR_USERNAME/kino-bot.git
+cd kino-bot
+```
 
-## 🔧 Keep-Alive Setup
+2. Install requirements:
+```bash
+pip install -r requirements.txt
+```
 
-### Step 1: Render.com Deployment
-Deploy normally to Render.com - keep-alive starts automatically!
+3. Configure environment variables:
+- Create `.env` file
+- Add your bot token and admin ID
+```env
+BOT_TOKEN=your_bot_token_here
+ADMIN_ID=your_admin_id_here
+MONGODB_URI=your_mongodb_uri_here
+```
 
-### Step 2: Uptime Robot Setup (FREE External Monitoring)
+4. Run bot:
+```bash
+python app.py
+```
 
-1. **Create Account**: Go to [UptimeRobot.com](https://uptimerobot.com/)
-2. **Add Monitor**:
-   - **Type**: HTTP(s)
-   - **Name**: "Kino Bot Keep-Alive"  
-   - **URL**: `https://your-app-name.onrender.com/ping`
-   - **Interval**: 5 minutes (free plan minimum)
-3. **Enable Alerts**: Add email/SMS notifications
-4. **Start Monitoring**: Bot will never sleep again! 🎉
+## Deployment
 
-### Step 3: Verify Setup
-- Check admin panel: `/admin` → `🔧 Tizim holati`
-- Test ping manually: `/admin` → `🏓 Ping test`
-- Monitor should show "Up" status
+Bot supports multiple deployment platforms:
+- Railway.app
+- Render.com
+- Any other Python hosting
 
-## 📊 Monitoring Endpoints
+## Admin Commands
 
-### For Uptime Robot:
-- **`/ping`** - Best for Uptime Robot (lightweight)
-- **`/health`** - Detailed health check
-- **`/`** - Basic status page
-
+- `/admin` - Access admin panel
+- `/stats` - View statistics  
+- `/broadcast` - Send broadcast
+- `/channels` - Manage channels
 ### Response Examples:
 ```json
 # /ping endpoint

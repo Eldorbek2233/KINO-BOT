@@ -14,8 +14,9 @@ def get_token():
     token = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
     if not token or token == "None" or len(token) < 30:
         # Fallback to new token if env not set
-        token = "8177519032:AAED4FgPoFQiQhqM_lvrK1iV8hL9u4SnkDk"
-        print("⚠️ BOT_TOKEN environment variable not set, using new fallback token!")
+        # You need to set BOT_TOKEN in Railway environment variables
+        raise ValueError("BOT_TOKEN environment variable is required!")
+        print("❌ Please set BOT_TOKEN in Railway environment variables")
     return token
 
 def get_admin_id():
@@ -44,7 +45,7 @@ def get_webhook_url():
         webhook_url = f"{railway_url}/webhook"
     else:
         # Default Railway domain placeholder - update with your actual domain
-        webhook_url = "https://your-kino-bot.up.railway.app/webhook"
+        webhook_url = "https://kino-bot-1.up.railway.app/webhook"
     
     print(f"🚂 Railway webhook URL: {webhook_url}")
     return webhook_url
